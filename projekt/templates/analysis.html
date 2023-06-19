@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Analysis</title>
+    <style>
+        body {
+            background-color: #f5f5f5; /* Kolor tła */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 900; /* Ustalenie wysokości strony */
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            max-width: 800px; /* Maksymalna szerokość kontenera */
+            padding: 20px;
+            background-color: white; /* Kolor tła kontenera */
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Cień kontenera */
+        }
+
+        h1, h2, h3 {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        img {
+            display: block;
+            margin: 20px auto; /* Wyśrodkowanie obrazków */
+            max-width: 100%; /* Maksymalna szerokość obrazków */
+        }
+
+        a {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Witaj {{ session['username'] }}</h1>
+        <h1>Średnie roczne wynagrodzenia brutto w sektorze przedsiębiorstw</h1>
+
+        <img src="data:image/png;base64,{{ plot_url1 }}" alt="Wykres 1">
+
+        <h2>Porównanie średnich miesięcznych wynagrodzeń brutto dla obecnego i poprzedniego roku</h2>
+        <img src="data:image/png;base64,{{ plot_url2 }}" alt="Wykres 2">
+
+        <h3>Mediana wynagrodzeń brutto w sektorze przedsiębiorstw</h3>
+        <img src="data:image/png;base64,{{ plot_url3 }}" alt="Wykres 3">
+
+        <h3>Wynagrodzenia nominalne vs. wynagrodzenia realne</h3>
+        <img src="data:image/png;base64,{{ plot_url4 }}" alt="Wykres 4">
+
+        <a href="/logout">Logout</a>
+    </div>
+</body>
+</html>
