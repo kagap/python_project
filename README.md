@@ -15,7 +15,6 @@ A Flask application (`projekt/app.py`) that visualizes average monthly gross wag
   - median wage by year,
   - nominal vs. inflation-adjusted ("real") wage over time.
 - Data files used: `projekt/2._przecietne_miesieczne_wynagrodzenia_brutto_w_sektorze_przedsiebiorstw_-_dane_miesieczne.csv` and `projekt/roczne_wskazniki_cen_towarow_i_uslug_konsumpcyjnych_od_1950_roku_2.csv`.
-- There's a GitHub Actions workflow (`.github/workflows/main_pythonprojekt.yml`) set up to deploy this app to an Azure Web App named "Pythonprojekt" on every push to `main`.
 
 #### Running `projekt/` locally
 
