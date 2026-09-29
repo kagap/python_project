@@ -21,6 +21,9 @@ Run any of them from inside their folder — each writes a `chart.png`.
 | [01_currency_volatility](01_currency_volatility/currency_volatility.py) | How bumpy the zloty's ride against USD/EUR/GBP has been over 5 years | NBP Web API |
 | [02_tallest_nations](02_tallest_nations/tallest_nations.py) | The world's 15 tallest countries, men vs women | Our World in Data |
 | [03_internet_users](03_internet_users/internet_users.py) | Internet adoption curves for 6 countries since 1995 | Our World in Data |
+| [05_keeling_curve](05_keeling_curve/keeling_curve.py) | Atmospheric CO2 since 1958, and how much faster it's rising each decade | NOAA GML |
+| [06_nobel_prizes](06_nobel_prizes/nobel_prizes.py) | Share of Nobel laureates who are women, over time and by category | Nobel Prize API |
+| [07_earthquakes](07_earthquakes/earthquakes.py) | M5.0+ earthquakes per year worldwide since 1990 | USGS Earthquake API |
 
 ```bash
 cd 01_currency_volatility
