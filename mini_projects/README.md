@@ -26,6 +26,10 @@ Run any of them from inside their folder — each writes a `chart.png`.
 | [07_earthquakes](07_earthquakes/earthquakes.py) | M5.0+ earthquakes per year worldwide since 1990 | USGS Earthquake API |
 | [08_late_delivery_model](08_late_delivery_model/late_delivery_model.py) | Machine-learning model predicting which Olist orders will arrive late (time-based validation, no leakage). Needs the Kaggle CSV files, point `OLIST_DIR` at them | Kaggle (Olist) |
 | [09_chinook_sql](09_chinook_sql/chinook_sql.py) | A music store in plain SQL: ten business questions with window functions, a recursive CTE, cohort retention and RFM. The queries are also in [chinook_queries.sql](09_chinook_sql/chinook_queries.sql). Needs `Chinook_Sqlite.sqlite`, point `CHINOOK_DB` at it | [Chinook database](https://github.com/lerocha/chinook-database/releases) |
+| [10_online_retail_sql](10_online_retail_sql/online_retail.py) | Two years of an online gift shop in plain SQL: seasonality, customer Pareto, RFM, cohort retention, market basket. Run `build_db.py` first | UCI (Online Retail II) |
+| [11_chicago_crime_sql](11_chicago_crime_sql/chicago_crime.py) | A year of crime in Chicago in plain SQL: arrest rates, neighbourhoods, unusual days, hot streaks, seasonality. Run `build_db.py` first | City of Chicago open data |
+| [12_nyc311_sql](12_nyc311_sql/nyc311.py) | What New Yorkers complain about, in plain SQL: medians and percentiles from window functions, complaint clocks, borough fingerprints. Run `build_db.py` first | NYC Open Data |
+| [13_world_bank_sql](13_world_bank_sql/world_bank.py) | 60 years of countries getting richer and healthier, in plain SQL: growth indices, correlation from sums, rank climbers. Run `build_db.py` first | World Bank API |
 
 ```bash
 cd 01_currency_volatility
