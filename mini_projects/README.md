@@ -25,6 +25,7 @@ Run any of them from inside their folder — each writes a `chart.png`.
 | [06_nobel_prizes](06_nobel_prizes/nobel_prizes.py) | Share of Nobel laureates who are women, over time and by category | Nobel Prize API |
 | [07_earthquakes](07_earthquakes/earthquakes.py) | M5.0+ earthquakes per year worldwide since 1990 | USGS Earthquake API |
 | [08_late_delivery_model](08_late_delivery_model/late_delivery_model.py) | Machine-learning model predicting which Olist orders will arrive late (time-based validation, no leakage). Needs the Kaggle CSV files, point `OLIST_DIR` at them | Kaggle (Olist) |
+| [09_chinook_sql](09_chinook_sql/chinook_sql.py) | A music store in plain SQL: ten business questions with window functions, a recursive CTE, cohort retention and RFM. The queries are also in [chinook_queries.sql](09_chinook_sql/chinook_queries.sql). Needs `Chinook_Sqlite.sqlite`, point `CHINOOK_DB` at it | [Chinook database](https://github.com/lerocha/chinook-database/releases) |
 
 ```bash
 cd 01_currency_volatility
