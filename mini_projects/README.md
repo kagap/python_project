@@ -24,6 +24,7 @@ Run any of them from inside their folder — each writes a `chart.png`.
 | [05_keeling_curve](05_keeling_curve/keeling_curve.py) | Atmospheric CO2 since 1958, and how much faster it's rising each decade | NOAA GML |
 | [06_nobel_prizes](06_nobel_prizes/nobel_prizes.py) | Share of Nobel laureates who are women, over time and by category | Nobel Prize API |
 | [07_earthquakes](07_earthquakes/earthquakes.py) | M5.0+ earthquakes per year worldwide since 1990 | USGS Earthquake API |
+| [08_late_delivery_model](08_late_delivery_model/late_delivery_model.py) | Machine-learning model predicting which Olist orders will arrive late (time-based validation, no leakage). Needs the Kaggle CSV files, point `OLIST_DIR` at them | Kaggle (Olist) |
 
 ```bash
 cd 01_currency_volatility
