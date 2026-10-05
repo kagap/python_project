@@ -32,6 +32,7 @@ Run any of them from inside their folder — each writes a `chart.png`.
 | [13_world_bank_sql](13_world_bank_sql/world_bank.py) | 60 years of countries getting richer and healthier, in plain SQL: growth indices, correlation from sums, rank climbers. Run `build_db.py` first | World Bank API |
 | [14_nyc_taxi_sql](14_nyc_taxi_sql/nyc_taxi.py) | A month of New York yellow cabs in plain SQL: week-on-week change with `LAG`, rush hours, airport runs, tipping, traffic speed. Run `build_db.py` first (needs `pyarrow`) | NYC TLC trip records |
 | [15_uk_road_safety_sql](15_uk_road_safety_sql/uk_road_safety.py) | A year of road collisions in Britain in plain SQL: three linked tables, severity by speed limit, light, vehicle and age. Run `build_db.py` first | UK Department for Transport |
+| [16_eurostat_sql](16_eurostat_sql/eurostat_europe.py) | Jobs and prices across Europe in plain SQL: crisis peaks, Poland against the EU, the 2022 price shock, longest falling streaks. Run `build_db.py` first | Eurostat |
 
 ```bash
 cd 01_currency_volatility
