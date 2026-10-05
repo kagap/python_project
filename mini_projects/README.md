@@ -30,6 +30,7 @@ Run any of them from inside their folder — each writes a `chart.png`.
 | [11_chicago_crime_sql](11_chicago_crime_sql/chicago_crime.py) | A year of crime in Chicago in plain SQL: arrest rates, neighbourhoods, unusual days, hot streaks, seasonality. Run `build_db.py` first | City of Chicago open data |
 | [12_nyc311_sql](12_nyc311_sql/nyc311.py) | What New Yorkers complain about, in plain SQL: medians and percentiles from window functions, complaint clocks, borough fingerprints. Run `build_db.py` first | NYC Open Data |
 | [13_world_bank_sql](13_world_bank_sql/world_bank.py) | 60 years of countries getting richer and healthier, in plain SQL: growth indices, correlation from sums, rank climbers. Run `build_db.py` first | World Bank API |
+| [14_nyc_taxi_sql](14_nyc_taxi_sql/nyc_taxi.py) | A month of New York yellow cabs in plain SQL: week-on-week change with `LAG`, rush hours, airport runs, tipping, traffic speed. Run `build_db.py` first (needs `pyarrow`) | NYC TLC trip records |
 
 ```bash
 cd 01_currency_volatility
