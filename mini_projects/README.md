@@ -34,6 +34,7 @@ Run any of them from inside their folder — each writes a `chart.png`.
 | [15_uk_road_safety_sql](15_uk_road_safety_sql/uk_road_safety.py) | A year of road collisions in Britain in plain SQL: three linked tables, severity by speed limit, light, vehicle and age. Run `build_db.py` first | UK Department for Transport |
 | [16_eurostat_sql](16_eurostat_sql/eurostat_europe.py) | Jobs and prices across Europe in plain SQL: crisis peaks, Poland against the EU, the 2022 price shock, longest falling streaks. Run `build_db.py` first | Eurostat |
 | [17_premier_league_sql](17_premier_league_sql/premier_league.py) | 25 seasons of the Premier League in plain SQL: rebuilt league tables, title races, unbeaten runs, comebacks, odds calibration, referees. Run `build_db.py` first | football-data.co.uk |
+| [18_nyc_restaurants_sql](18_nyc_restaurants_sql/nyc_restaurants.py) | New York restaurant inspections in plain SQL: grades by borough, common violations, medians per cuisine, chains, closures, recovery after a failed inspection. Run `build_db.py` first | NYC Open Data |
 
 ```bash
 cd 01_currency_volatility
