@@ -39,6 +39,7 @@ Run any of them from inside their folder — each writes a `chart.png`.
 | [20_football_elo](20_football_elo/elo_football.py) | Elo ratings for Europe's top five leagues turned into match probabilities, tested on unseen seasons against Bet365's odds. Downloads its data (about 9 MB) on first run | football-data.co.uk |
 | [21_lastfm_recommender](21_lastfm_recommender/lastfm_recommender.py) | A music recommender three ways (popularity, item-item filtering, implicit ALS written in NumPy), scored on hidden listening. Downloads its data (about 2.6 MB) on first run | GroupLens (Last.fm) |
 | [22_bank_segments](22_bank_segments/bank_segments.py) | K-means segmentation of 45,000 bank clients with stability checks and a test of whether the segments respond differently to an offer. Downloads its data (about 1 MB) on first run | UCI (Bank Marketing) |
+| [23_bike_demand](23_bike_demand/bike_demand.py) | Hourly demand forecasting for a bike-sharing system: lag features without leakage, a scale-free target, conformal prediction intervals, errors on holidays and Hurricane Sandy. Downloads its data (about 0.3 MB) on first run | UCI (Bike Sharing) |
 
 ```bash
 cd 01_currency_volatility
