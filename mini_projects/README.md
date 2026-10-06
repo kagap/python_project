@@ -36,6 +36,7 @@ Run any of them from inside their folder — each writes a `chart.png`.
 | [17_premier_league_sql](17_premier_league_sql/premier_league.py) | 25 seasons of the Premier League in plain SQL: rebuilt league tables, title races, unbeaten runs, comebacks, odds calibration, referees. Run `build_db.py` first | football-data.co.uk |
 | [18_nyc_restaurants_sql](18_nyc_restaurants_sql/nyc_restaurants.py) | New York restaurant inspections in plain SQL: grades by borough, common violations, medians per cuisine, chains, closures, recovery after a failed inspection. Run `build_db.py` first | NYC Open Data |
 | [19_movielens_sql](19_movielens_sql/movielens.py) | 100,000 movie ratings in plain SQL: a weighted rating that beats one-vote wonders, genres, user concentration with `NTILE`, release decades, divisive films. Run `build_db.py` first | GroupLens (MovieLens) |
+| [20_football_elo](20_football_elo/elo_football.py) | Elo ratings for Europe's top five leagues turned into match probabilities, tested on unseen seasons against Bet365's odds. Downloads its data (about 9 MB) on first run | football-data.co.uk |
 
 ```bash
 cd 01_currency_volatility
