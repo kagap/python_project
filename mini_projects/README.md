@@ -41,6 +41,7 @@ Run any of them from inside their folder — each writes a `chart.png`.
 | [22_bank_segments](22_bank_segments/bank_segments.py) | K-means segmentation of 45,000 bank clients with stability checks and a test of whether the segments respond differently to an offer. Downloads its data (about 1 MB) on first run | UCI (Bank Marketing) |
 | [23_bike_demand](23_bike_demand/bike_demand.py) | Hourly demand forecasting for a bike-sharing system: lag features without leakage, a scale-free target, conformal prediction intervals, errors on holidays and Hurricane Sandy. Downloads its data (about 0.3 MB) on first run | UCI (Bike Sharing) |
 | [24_credit_default](24_credit_default/credit_default.py) | A credit risk model built to be used: calibration, a cut-off chosen by the cost of mistakes, and a fairness audit by group. Downloads its data (about 5.5 MB) on first run | UCI (Default of Credit Card Clients) |
+| [25_sms_spam](25_sms_spam/sms_spam.py) | A text-message spam filter judged on precision, with duplicate removal, error analysis, a robustness stress test and a learning curve. Downloads its data (about 0.2 MB) on first run | UCI (SMS Spam Collection) |
 
 ```bash
 cd 01_currency_volatility
