@@ -45,6 +45,7 @@ Run any of them from inside their folder — each writes a `chart.png`.
 | [26_climate_trends](26_climate_trends/climate_trends.py) | Fifteen years of weather in twelve cities: seasonality, trends with confidence intervals, hot and frost days, and honest counting of significant results. Downloads its data (about 2 MB, a few minutes) on first run | Open-Meteo (ERA5) |
 | [27_air_quality_calibration](27_air_quality_calibration/air_quality_calibration.py) | Calibrating cheap air quality sensors against a reference analyser: missing data, drift, and what weekly re-calibration buys. Downloads its data (about 1.5 MB) on first run | UCI (Air Quality) |
 | [28_ipl_cricket_sql](28_ipl_cricket_sql/ipl_cricket.py) | Every ball of the Indian Premier League in plain SQL: season-by-season scoring, batting and bowling tables, powerplay and death overs, chasing by ground, the toss, orange and purple caps, batter-bowler duels, career run totals. Run `build_db.py` first | Cricsheet |
+| [29_gutenberg_sql](29_gutenberg_sql/gutenberg_books.py) | The Project Gutenberg catalogue in plain SQL: library growth, languages, prolific authors, birth decades and lifespans, subject pairs with lift and a recursive CTE that splits titles into words. Run `build_db.py` first | Project Gutenberg |
 
 ```bash
 cd 01_currency_volatility
