@@ -48,6 +48,7 @@ Run any of them from inside their folder — each writes a `chart.png`.
 | [29_gutenberg_sql](29_gutenberg_sql/gutenberg_books.py) | The Project Gutenberg catalogue in plain SQL: library growth, languages, prolific authors, birth decades and lifespans, subject pairs with lift and a recursive CTE that splits titles into words. Run `build_db.py` first | Project Gutenberg |
 | [30_poland_counties_sql](30_poland_counties_sql/poland_counties.py) | Twenty years of Polish counties in plain SQL: a pivot view, border changes found with `LAG`, wage convergence with a regression computed from sums, rank climbers, shrinking and growing counties, persistent unemployment with `NTILE`. Run `build_db.py` first | GUS Local Data Bank |
 | [31_space_launches_sql](31_space_launches_sql/space_launches.py) | Every rocket launch in history in plain SQL: launches per year, who launched by decade, rocket families, failure rate by flight number, launch sites, gaps between launches with `LAG`, SpaceX's share, orbit types and the longest unbroken runs of success (gaps and islands). Run `build_db.py` first | GCAT (J. McDowell) |
+| [32_exoplanets_sql](32_exoplanets_sql/exoplanets.py) | Every known exoplanet in plain SQL: discovery methods and telescopes, the Kepler batches, size classes and the radius valley, density against size, period ratios inside systems, host stars, Earth-like candidates and the nearest systems. Run `build_db.py` first | NASA Exoplanet Archive |
 
 ```bash
 cd 01_currency_volatility
