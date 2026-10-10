@@ -47,6 +47,7 @@ Run any of them from inside their folder — each writes a `chart.png`.
 | [28_ipl_cricket_sql](28_ipl_cricket_sql/ipl_cricket.py) | Every ball of the Indian Premier League in plain SQL: season-by-season scoring, batting and bowling tables, powerplay and death overs, chasing by ground, the toss, orange and purple caps, batter-bowler duels, career run totals. Run `build_db.py` first | Cricsheet |
 | [29_gutenberg_sql](29_gutenberg_sql/gutenberg_books.py) | The Project Gutenberg catalogue in plain SQL: library growth, languages, prolific authors, birth decades and lifespans, subject pairs with lift and a recursive CTE that splits titles into words. Run `build_db.py` first | Project Gutenberg |
 | [30_poland_counties_sql](30_poland_counties_sql/poland_counties.py) | Twenty years of Polish counties in plain SQL: a pivot view, border changes found with `LAG`, wage convergence with a regression computed from sums, rank climbers, shrinking and growing counties, persistent unemployment with `NTILE`. Run `build_db.py` first | GUS Local Data Bank |
+| [31_space_launches_sql](31_space_launches_sql/space_launches.py) | Every rocket launch in history in plain SQL: launches per year, who launched by decade, rocket families, failure rate by flight number, launch sites, gaps between launches with `LAG`, SpaceX's share, orbit types and the longest unbroken runs of success (gaps and islands). Run `build_db.py` first | GCAT (J. McDowell) |
 
 ```bash
 cd 01_currency_volatility
