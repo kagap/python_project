@@ -72,3 +72,9 @@ cd 04_wiki_trends_dashboard
 pip install -r requirements.txt
 streamlit run app.py
 ```
+
+## Tools
+
+| Project | What it does |
+|---|---|
+| [34_pbix_generator](34_pbix_generator/pbigen.py) | Builds a ready-made Power BI project (data model, DAX measures, two report pages) from a CSV or Excel file, locally and without an AI model. Open the result in Power BI Desktop and save it as a .pbix |
