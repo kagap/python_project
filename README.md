@@ -18,25 +18,25 @@ A Flask application (`projekt/app.py`) that visualizes average monthly gross wag
 
 #### Running `projekt/` locally
 
-The app needs Flask, Flask-SQLAlchemy, pandas, and matplotlib (there's no `requirements.txt` committed for this part of the repo, so install them manually):
+The app needs Flask, Flask-SQLAlchemy, pandas, and matplotlib (listed in `projekt/requirements.txt`):
 
 ```bash
 cd projekt
-pip install flask flask_sqlalchemy pandas matplotlib
+pip install -r requirements.txt
 python app.py
 ```
 
-Then open `http://127.0.0.1:5000` and log in with `admin` / `admin`.
+Then open `http://127.0.0.1:5000` and log in with `admin` / `admin` (a demo account created on first run: change the password before exposing the app anywhere).
 
 ### `mini_projects/` — Small Data-Viz Scripts
 
-A set of short, single-purpose Python scripts, each pulling data from a free public API/dataset and turning it into one chart (currency volatility, tallest nations, internet adoption), plus a small Streamlit dashboard ("Wikipedia Pulse") for exploring Wikipedia's most-read articles. See [`mini_projects/README.md`](mini_projects/README.md) for details on each script and how to run them.
+36 small projects: short Python scripts that pull data from a free public API or dataset and turn it into charts or models, SQL case studies (most of the numbers 09 to 19 and 28 to 36: plain SQL on SQLite with the queries in `.sql` files), and a small Streamlit dashboard ("Wikipedia Pulse"). See [`mini_projects/README.md`](mini_projects/README.md) for details on each script and how to run them.
 
-## ⚠️ Note on repo size
+## Note on repo size
 
-This repository is larger than expected for its content (~60 MB `.git` history). That's because `projekt/venv/` — a full Python virtual environment with all installed packages (Flask, pandas, matplotlib, numpy, etc.) — was committed directly into the repository instead of being excluded. The top-level `.gitignore` only ignores `.venv/`, not `projekt/venv/`, so it slipped through. It hasn't been removed here; flagging it in case it's worth cleaning up (e.g. removing it from history) later.
+The `.git` history is about 60 MB because an earlier commit contained `projekt/venv/`, a full Python virtual environment, plus compiled caches and the app's SQLite file. They are no longer tracked and `.gitignore` excludes them, but they still sit in the old history; a fresh clone downloads them unless it is shallow (`git clone --depth 1`). The app creates its database (`projekt/instance/database.db`) on first run.
 
 ## Requirements
 
-- Python 3.9+ (the committed `projekt/venv` was built against 3.9)
+- Python 3.9+
 - `pip` for installing dependencies

@@ -2,3 +2,13 @@
 __pycache__/
 *.pyc
 .claude/
+
+# Python environments, caches and local databases
+venv/
+env/
+.env
+*.db
+instance/
+.idea/
+.vscode/
+.ipynb_checkpoints/
