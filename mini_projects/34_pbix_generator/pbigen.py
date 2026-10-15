@@ -14,7 +14,10 @@ route Microsoft documents for generating reports from code. The file formats fol
 https://github.com/microsoft/json-schemas (the same versions that the installed Power BI Desktop writes).
 """
 import argparse
+import base64
 import csv
+import gzip
+import io
 import json
 import os
 import re
@@ -32,7 +35,8 @@ SCHEMA = "https://developer.microsoft.com/json-schemas/fabric/item/report/defini
 V_REPORT, V_PAGE, V_PAGES, V_VISUAL, V_VERSION = "3.3.0", "2.1.0", "1.1.0", "2.13.0", "1.0.0"
 IMPORT_VERSIONS = {"visual": "2.13.0", "report": "3.4.0", "page": "2.3.1"}
 FALLBACK_THEME = "Fluent2-CY26SU09"
-PAGE_W, PAGE_H = 1280, 720
+PAGE_W, PAGE_H = 1920, 1080          # the layout below is designed on a 1280 x 720 grid and scaled up to this page size
+K = PAGE_W / 1280
 
 DATE_FORMATS = [  # (python strptime, .NET format for Power Query)
     ("%Y-%m-%d", "yyyy-MM-dd"), ("%Y-%m-%d %H:%M:%S", "yyyy-MM-dd HH:mm:ss"), ("%Y-%m-%dT%H:%M:%S", "yyyy-MM-ddTHH:mm:ss"),
@@ -71,7 +75,8 @@ def classify(df, culture):
         s = df[name].dropna()
         n, nuniq = len(s), s.nunique()
         info = {"name": str(name).strip(), "orig": name, "non_null": n, "distinct": int(nuniq), "missing_pct": 100 * (1 - n / max(len(df), 1)),
-                "kind": "text", "decimal_comma": False, "date_format": None}
+                "kind": "text", "decimal_comma": False, "date_format": None,
+                "avg_len": float(s.astype(str).str.len().mean()) if n else 0.0}
         if n == 0:
             info["kind"] = "empty"
         elif s.map(lambda v: isinstance(v, (datetime, pd.Timestamp))).all():
@@ -127,6 +132,8 @@ def pick_roles(cols, n_rows, args):
                    and not (re.fullmatch(r"(year|rok|yr)", c["name"], re.I))]
     metric_pool.sort(key=lambda c: (not METRIC_HINT.search(c["name"]), c["missing_pct"] > 30, cols.index(c)))
     metrics = [by_name[x] for x in args.metrics.split(",") if x in by_name] if args.metrics else metric_pool
+    if args.only_custom:
+        metrics = []
     dims = [d for d in dims if d not in metrics]
     return date, dims, metrics[:4]
 
@@ -169,15 +176,28 @@ def table_name(path, given):
 
 
 # ------------------------------------------------------------------ semantic model
-def build_measures(table, rows_name, metrics):
+def parse_custom_measures(items, table):
+    """--measure "Name=DAX|format": {T} in the DAX stands for the table name."""
+    out = []
+    for item in items or []:
+        name, _, rest = item.partition("=")
+        dax, _, fmt = rest.rpartition("|") if "|" in rest else (rest, "", "#,0")
+        out.append((name.strip(), dax.strip().replace("{T}", table), fmt.strip() or "#,0", "custom"))
+    return out
+
+
+def build_measures(table, rows_name, metrics, custom=()):
     """(name, dax, formatString, kind) for each measure; the first one for each metric is the headline."""
-    measures = [(rows_name, f"COUNTROWS({table})", "#,0", "rows")]
+    measures = [(rows_name, f"COUNTROWS({table})", "#,0", "rows")] + list(custom)
+    taken = {m[0] for m in measures}
     for c in metrics:
         col = dax_col(table, c["name"])
         fmt = "#,0" if c["kind"] == "int" else "#,0.00"
         total, avg = (f"Total {c['name']}", f"Average {c['name']}")
-        measures.append((total, f"SUM({col})", fmt, "total"))
-        measures.append((avg, f"AVERAGE({col})", "#,0.00", "average"))
+        if total not in taken:
+            measures.append((total, f"SUM({col})", fmt, "total"))
+        if avg not in taken:
+            measures.append((avg, f"AVERAGE({col})", "#,0.00", "average"))
     return measures
 
 
@@ -189,7 +209,12 @@ def headline(metric, measures):
 
 def m_query(src, table, cols, date_col, path):
     steps, last = [], "Source"
-    if src["kind"] == "excel":
+    if src.get("embedded"):
+        chunks = [src["embedded"][i:i + 3000] for i in range(0, len(src["embedded"]), 3000)]
+        literal_text = ' &\n\t\t\t\t\t'.join(m_str(c) for c in chunks)
+        steps.append(f'Source = Csv.Document(Binary.Decompress(Binary.FromText({literal_text}, BinaryEncoding.Base64), Compression.GZip), '
+                     f'[Delimiter=",", Columns={len(cols)}, Encoding=65001, QuoteStyle=QuoteStyle.Csv])')
+    elif src["kind"] == "excel":
         steps.append(f'Source = Excel.Workbook(File.Contents({m_str(str(path))}), null, true)')
         steps.append(f'Sheet = Source{{[Item={m_str(src.get("sheet_name") or "Sheet1")},Kind="Sheet"]}}[Data]')
         last = "Sheet"
@@ -270,135 +295,396 @@ def proj(field, table, name, fmt=None, active=False):
     return p
 
 
-def container(page, key, x, y, w, h, z, visual):
-    return {"$schema": f"{SCHEMA}/visualContainer/{V_VISUAL}/schema.json", "name": oid(page, key),
-            "position": {"x": x, "y": y, "z": z, "height": h, "width": w, "tabOrder": z}, "visual": visual}
+# ---------------------------------------------------------------------------------------------------------------------
+# Report design: card layout, a three-colour palette, side navigation, the collapsible Filters pane, tooltip page, KPI sparklines
+# ---------------------------------------------------------------------------------------------------------------------
+NAVY, TEAL, ACCENT = "#1B2A49", "#0E7C86", "#F2994A"          # neutral dark, brand colour, accent used only to point things out
+INK, MUTED, BG, CARD, EDGE = "#2D3748", "#718096", "#F3F4F6", "#FFFFFF", "#E2E8F0"
 
 
-def title_obj(text):
-    return {"title": [{"properties": {"show": {"expr": {"Literal": {"Value": "true"}}}, "text": literal(text)}}],
-            "subTitle": [{"properties": {"show": {"expr": {"Literal": {"Value": "false"}}}}}]}
+def lit(v):
+    return {"expr": {"Literal": {"Value": v}}}
 
 
-def v_textbox(page, key, x, y, w, h, z, runs):
+def tx(text):
+    return lit("'" + text.replace("'", "''") + "'")
+
+
+def flag(x):
+    return lit("true" if x else "false")
+
+
+def num(x, suffix="D"):
+    return lit(f"{x}{suffix}")
+
+
+def solid(hex_color):
+    return {"solid": {"color": lit("'" + hex_color + "'")}}
+
+
+def container(page, key, x, y, w, h, z, visual, hidden=False, scale=None):
+    k = K if scale is None else scale
+    c = {"$schema": f"{SCHEMA}/visualContainer/{V_VISUAL}/schema.json", "name": oid(page, key),
+         "position": {"x": round(x * k, 1), "y": round(y * k, 1), "z": z, "height": round(h * k, 1), "width": round(w * k, 1), "tabOrder": z},
+         "visual": visual}
+    if hidden:
+        c["isHidden"] = True
+    return c
+
+
+def card_objects(title=None):
+    """A white card with a thin border and rounded corners, and a small bold title (or none)."""
+    o = {"background": [{"properties": {"show": flag(True), "color": solid(CARD), "transparency": num(0)}}],
+         "border": [{"properties": {"show": flag(True), "color": solid(EDGE), "radius": num(8), "width": num(1)}}],
+         "subTitle": [{"properties": {"show": flag(False)}}]}
+    o["title"] = [{"properties": {"show": flag(True), "text": tx(title), "fontColor": solid(INK), "fontSize": num(12), "bold": flag(True)}}] if title \
+        else [{"properties": {"show": flag(False)}}]
+    return o
+
+
+def chart_objects(kind):
+    """Quiet charts: no gridlines, no value axis when the bars carry labels, no legend unless the chart needs one."""
+    off, on = flag(False), flag(True)
+    if kind in ("clusteredBarChart", "clusteredColumnChart"):
+        return {"valueAxis": [{"properties": {"show": off, "gridlineShow": off}}], "categoryAxis": [{"properties": {"showAxisTitle": off}}],
+                "labels": [{"properties": {"show": on}}], "legend": [{"properties": {"show": off}}]}
+    if kind in ("lineChart", "areaChart"):
+        return {"valueAxis": [{"properties": {"gridlineShow": off, "showAxisTitle": off}}], "categoryAxis": [{"properties": {"showAxisTitle": off}}],
+                "legend": [{"properties": {"show": off}}]}
+    if kind == "scatterChart":
+        return {"legend": [{"properties": {"show": off}}], "valueAxis": [{"properties": {"gridlineShow": off}}], "categoryLabels": [{"properties": {"show": on}}]}
+    if kind == "treemap":
+        return {"legend": [{"properties": {"show": off}}], "labels": [{"properties": {"show": on}}]}
+    if kind == "donutChart":
+        return {"legend": [{"properties": {"show": on}}], "labels": [{"properties": {"show": on}}]}
+    return {}
+
+
+def tooltip_obj(tip_page):
+    return {"visualTooltip": [{"properties": {"show": flag(True), "type": tx("ReportPage"), "section": tx(tip_page)}}]} if tip_page else {}
+
+
+def v_textbox(page, key, x, y, w, h, z, runs, card=False, scale=None):
     paragraphs = [{"textRuns": [{"value": text, **({"textStyle": style} if style else {})}]} for text, style in runs]
     v = {"visualType": "textbox", "objects": {"general": [{"properties": {"paragraphs": paragraphs}}]}, "drillFilterOtherVisuals": True}
-    return container(page, key, x, y, w, h, z, v)
+    if card:
+        v["visualContainerObjects"] = card_objects()
+    return container(page, key, x, y, w, h, z, v, scale=scale)
+
+
+def v_shape(page, key, x, y, w, h, z, fill, hidden=False, border=False, radius=0):
+    v = {"visualType": "basicShape",
+         "objects": {"general": [{"properties": {"shapeType": tx("rectangle")}}],
+                     "fill": [{"properties": {"show": flag(True), "fillColor": solid(fill)}}],
+                     "line": [{"properties": {"show": flag(border), "lineColor": solid(EDGE), "weight": num(1)}}],
+                     "rotation": [{"properties": {"shapeAngle": num(0)}}]},
+         "visualContainerObjects": {"background": [{"properties": {"show": flag(False)}}], "border": [{"properties": {"show": flag(False)}}]},
+         "drillFilterOtherVisuals": True}
+    if radius:
+        v["objects"]["general"][0]["properties"]["roundEdge"] = num(radius, "L")
+    return container(page, key, x, y, w, h, z, v, hidden=hidden)
+
+
+def v_button(page, key, x, y, w, h, z, label, action, fill=None, text_color=CARD, size=11, bold=False, hidden=False):
+    """A text button: a text box (with an optional coloured background) that carries the click action itself.
+    action = ('page', page_name) or ('bookmark', bookmark_name)."""
+    kind, target = action
+    link = {"show": flag(True), "type": tx("PageNavigation" if kind == "page" else "Bookmark")}
+    link["navigationSection" if kind == "page" else "bookmark"] = tx(target)
+    style = {"fontSize": f"{size}pt", "color": text_color, **({"fontWeight": "bold"} if bold else {})}
+    bg = ({"show": flag(True), "color": solid(fill), "transparency": num(0)} if fill else {"show": flag(False)})
+    v = {"visualType": "textbox",
+         "objects": {"general": [{"properties": {"paragraphs": [{"textRuns": [{"value": label, "textStyle": style}], "horizontalTextAlignment": "center"}]}}]},
+         "visualContainerObjects": {"background": [{"properties": bg}], "border": [{"properties": {"show": flag(False)}}],
+                                    "padding": [{"properties": {"top": num(max(round(h * K / 2 - size * 1.4), 2), "L")}}],
+                                    "visualLink": [{"properties": link}]},
+         "drillFilterOtherVisuals": True}
+    return [container(page, key, x, y, w, h, z, v, hidden=hidden)]
 
 
 def v_card(page, table, measure, fmt, x, y, w, h, z):
     v = {"visualType": "cardVisual",
          "query": {"queryState": {"Data": {"projections": [proj(fld_meas(table, measure), table, measure, fmt)]}},
                    "sortDefinition": {"sort": [{"field": fld_meas(table, measure), "direction": "Descending"}], "isDefaultSort": True}},
-         "drillFilterOtherVisuals": True}
+         "visualContainerObjects": card_objects(), "drillFilterOtherVisuals": True}
     return container(page, "card-" + measure, x, y, w, h, z, v)
 
 
-def v_slicer(page, table, col, label, x, y, w, h, z, dropdown=True):
-    objects = {"header": [{"properties": {"show": {"expr": {"Literal": {"Value": "false"}}}}}]}
+def v_kpi(page, table, measure, fmt, trend_field, trend_name, x, y, w, h, z):
+    """A KPI tile: the card, and a small line chart with no axes laid over its lower half (a sparkline)."""
+    off = flag(False)
+    number = container(page, "kpi-" + measure, x, y, w, h, z, {
+        "visualType": "cardVisual",
+        "query": {"queryState": {"Data": {"projections": [proj(fld_meas(table, measure), table, measure, fmt)]}}},
+        "visualContainerObjects": card_objects(), "drillFilterOtherVisuals": True})
+    spark = container(page, "spark-" + measure, x + 6, y + h * 0.42, w - 12, h * 0.55, z + 1, {
+        "visualType": "lineChart",
+        "query": {"queryState": {"Category": {"projections": [proj(trend_field, table, trend_name, active=True)]},
+                                 "Y": {"projections": [proj(fld_meas(table, measure), table, measure, fmt)]}},
+                  "sortDefinition": {"sort": [{"field": trend_field, "direction": "Ascending"}], "isDefaultSort": True}},
+        "objects": {"valueAxis": [{"properties": {"show": off, "gridlineShow": off}}], "categoryAxis": [{"properties": {"show": off}}],
+                    "legend": [{"properties": {"show": off}}], "labels": [{"properties": {"show": off}}]},
+        "visualContainerObjects": {"title": [{"properties": {"show": off}}], "subTitle": [{"properties": {"show": off}}],
+                                   "background": [{"properties": {"show": off}}], "border": [{"properties": {"show": off}}]},
+        "drillFilterOtherVisuals": True})
+    return [number, spark]
+
+
+def v_slicer(page, table, col, label, x, y, w, h, z, dropdown=True, hidden=False):
+    objects = {"header": [{"properties": {"show": flag(False)}}]}
     if dropdown:
-        objects["data"] = [{"properties": {"mode": literal("Dropdown")}}]
+        objects["data"] = [{"properties": {"mode": tx("Dropdown")}}]
     v = {"visualType": "slicer",
          "query": {"queryState": {"Values": {"projections": [proj(fld_col(table, col), table, col, active=True)]}}},
-         "objects": objects, "visualContainerObjects": {"title": [{"properties": {"show": {"expr": {"Literal": {"Value": "true"}}}, "text": literal(label)}}]},
+         "objects": objects,
+         "visualContainerObjects": {"title": [{"properties": {"show": flag(True), "text": tx(label), "fontColor": solid(MUTED), "fontSize": num(10)}}],
+                                    "background": [{"properties": {"show": flag(False)}}], "border": [{"properties": {"show": flag(False)}}]},
+         "syncGroup": {"groupName": col, "fieldChanges": True, "filterChanges": True},
          "drillFilterOtherVisuals": True}
-    return container(page, "slicer-" + col, x, y, w, h, z, v)
+    return container(page, "slicer-" + col, x, y, w, h, z, v, hidden=hidden)
 
 
-def v_chart(page, kind, table, cat_field, cat_name, measure, fmt, title, x, y, w, h, z, sort_by_measure=True):
+def v_chart(page, kind, table, cat_field, cat_name, measure, fmt, title, x, y, w, h, z, sort_by_measure=True, tip=None):
     q = {"queryState": {"Category": {"projections": [proj(cat_field, table, cat_name, active=True)]},
                         "Y": {"projections": [proj(fld_meas(table, measure), table, measure, fmt)]}}}
-    if sort_by_measure:
-        q["sortDefinition"] = {"sort": [{"field": fld_meas(table, measure), "direction": "Descending"}], "isDefaultSort": True}
-    else:
-        q["sortDefinition"] = {"sort": [{"field": cat_field, "direction": "Ascending"}], "isDefaultSort": True}
-    v = {"visualType": kind, "query": q, "visualContainerObjects": title_obj(title), "drillFilterOtherVisuals": True}
-    if kind in ("clusteredBarChart", "lineChart"):
-        v["objects"] = {"labels": [{"properties": {"show": {"expr": {"Literal": {"Value": "true"}}}}}]} if kind == "clusteredBarChart" else {}
-        if not v["objects"]:
-            del v["objects"]
+    q["sortDefinition"] = {"sort": [{"field": fld_meas(table, measure) if sort_by_measure else cat_field,
+                                     "direction": "Descending" if sort_by_measure else "Ascending"}], "isDefaultSort": True}
+    vco = card_objects(title)
+    vco.update(tooltip_obj(tip))
+    v = {"visualType": kind, "query": q, "objects": chart_objects(kind), "visualContainerObjects": vco, "drillFilterOtherVisuals": True}
+    if not v["objects"]:
+        del v["objects"]
     return container(page, f"{kind}-{cat_name}-{measure}", x, y, w, h, z, v)
+
+
+def v_treemap(page, table, cat_field, cat_name, measure, fmt, title, x, y, w, h, z, tip=None):
+    vco = card_objects(title)
+    vco.update(tooltip_obj(tip))
+    v = {"visualType": "treemap",
+         "query": {"queryState": {"Group": {"projections": [proj(cat_field, table, cat_name, active=True)]},
+                                  "Values": {"projections": [proj(fld_meas(table, measure), table, measure, fmt)]}}},
+         "objects": chart_objects("treemap"), "visualContainerObjects": vco, "drillFilterOtherVisuals": True}
+    return container(page, f"treemap-{cat_name}-{measure}", x, y, w, h, z, v)
+
+
+def v_scatter(page, table, cat_field, cat_name, x_meas, y_meas, size_meas, fmts, title, x, y, w, h, z, tip=None):
+    vco = card_objects(title)
+    vco.update(tooltip_obj(tip))
+    v = {"visualType": "scatterChart",
+         "query": {"queryState": {"Category": {"projections": [proj(cat_field, table, cat_name, active=True)]},
+                                  "X": {"projections": [proj(fld_meas(table, x_meas), table, x_meas, fmts[x_meas], active=True)]},
+                                  "Y": {"projections": [proj(fld_meas(table, y_meas), table, y_meas, fmts[y_meas], active=True)]},
+                                  "Size": {"projections": [proj(fld_meas(table, size_meas), table, size_meas, fmts[size_meas])]}}},
+         "objects": chart_objects("scatterChart"), "visualContainerObjects": vco, "drillFilterOtherVisuals": True}
+    return container(page, f"scatter-{cat_name}-{x_meas}-{y_meas}", x, y, w, h, z, v)
+
+
+def v_matrix(page, table, rows, columns, measures, fmts, title, x, y, w, h, z):
+    state = {"Rows": {"projections": [proj(fld_col(table, c), table, c, active=True) for c in rows]},
+             "Values": {"projections": [proj(fld_meas(table, m), table, m, fmts[m]) for m in measures]}}
+    if columns:
+        state["Columns"] = {"projections": [proj(fld_col(table, c), table, c, active=True) for c in columns]}
+    v = {"visualType": "pivotTable", "query": {"queryState": state}, "visualContainerObjects": card_objects(title), "drillFilterOtherVisuals": True}
+    return container(page, f"matrix-{'-'.join(rows)}-{'-'.join(columns)}", x, y, w, h, z, v)
 
 
 def v_table(page, table, columns, extra_measures, title, x, y, w, h, z):
     projections = [proj(fld_col(table, c), table, c) for c in columns] + [proj(fld_meas(table, m), table, m) for m in extra_measures]
     v = {"visualType": "tableEx", "query": {"queryState": {"Values": {"projections": projections}}},
-         "visualContainerObjects": title_obj(title), "drillFilterOtherVisuals": True}
+         "visualContainerObjects": card_objects(title), "drillFilterOtherVisuals": True}
     return container(page, "table-" + title, x, y, w, h, z, v)
 
 
-def build_report(table, title, date, dims, metrics, measures, cols, plan_notes):
-    """Return {relative path: json} for the PBIR definition folder."""
-    mnames = {m[0]: m for m in measures}
+def theme_json():
+    colors = [TEAL, "#A0AEC0", ACCENT, NAVY, "#5BB5BD", "#CBD5E0", "#F6C28B", "#4A5568"]
+    return {"name": "pbigen teal", "dataColors": colors, "background": CARD, "foreground": INK, "tableAccent": TEAL,
+            "good": TEAL, "neutral": "#A0AEC0", "bad": ACCENT, "maximum": TEAL, "center": "#A0AEC0", "minimum": ACCENT,
+            "textClasses": {"callout": {"fontSize": 26, "fontFace": "Segoe UI Semibold", "color": INK},
+                            "title": {"fontSize": 12, "fontFace": "Segoe UI Semibold", "color": INK},
+                            "header": {"fontSize": 12, "fontFace": "Segoe UI Semibold", "color": INK},
+                            "label": {"fontSize": 10, "fontFace": "Segoe UI", "color": MUTED}},
+            "visualStyles": {"page": {"*": {"background": [{"color": {"solid": {"color": BG}}, "transparency": 0}],
+                                            "outspace": [{"color": {"solid": {"color": "#E5E7EB"}}, "transparency": 0}]}}}}
+
+
+NAV_W = 170
+CX, CW = NAV_W + 16, 1280 - NAV_W - 16 - 24            # content column: x and width on the 1280 grid
+
+
+def build_report(table, title, date, dims, metrics, measures, cols, about=None, source=None):
+    """Return ({relative path: json}, theme dict) for the PBIR definition folder."""
     rows_name = measures[0][0]
-    heads = [headline(m, measures) for m in metrics]
+    customs = [m[0] for m in measures if m[3] == "custom"]
+    heads = customs + [headline(m, measures) for m in metrics]
     fmts = {m[0]: m[2] for m in measures}
+    m1 = heads[0] if heads else rows_name
+    m2 = heads[1] if len(heads) > 1 else rows_name
+    m3 = heads[2] if len(heads) > 2 else m1
+    int_dims = {d["name"] for d in dims if d["kind"] == "int"}
+    col_dims = int_dims | {d["name"] for d in dims if 7 <= d["distinct"] <= 15 and d["avg_len"] <= 10}
 
-    pages = {}
-    P1, P2 = oid("page", "overview"), oid("page", "details")
-    z = [0]
+    keys = ["overview"] + (["breakdown"] if dims else []) + (["compare"] if dims and (len(heads) >= 2 or len(dims) >= 2) else []) \
+        + (["trends"] if date else []) + (["matrix"] if dims else []) + ["details", "about"]
+    labels = {"overview": "Overview", "breakdown": "Breakdown", "compare": "Compare", "trends": "Trends", "matrix": "Matrix", "details": "Details", "about": "About"}
+    pid_of = {k: oid("page", k) for k in keys}
+    tip_pid = oid("page", "tooltip")
 
-    def nz():
-        z[0] += 1000
-        return z[0]
-
-    v1 = [v_textbox(P1, "title", 24, 12, 1232, 44, nz(), [(title, {"fontSize": "22pt", "fontWeight": "bold"})])]
-    # slicers: the date range, then up to two dimensions
     sl = []
     if date:
         sl.append((date["name"], date["name"], False))
-    for d in dims[:2 if date else 3]:
+    for d in dims[:3 if date else 4]:
         sl.append((d["name"], d["name"], True))
-    sw = 300
-    for i, (col, label, dd) in enumerate(sl):
-        v1.append(v_slicer(P1, table, col, label, 24 + i * (sw + 16), 62, sw, 78, nz(), dropdown=dd))
-    # KPI cards: row count then the headline measures
-    cards = [rows_name] + heads[:3]
-    cw = (1232 - 16 * (len(cards) - 1)) / max(len(cards), 1)
-    for i, name in enumerate(cards):
-        v1.append(v_card(P1, table, name, fmts[name], round(24 + i * (cw + 16), 1), 150, round(cw, 1), 84, nz()))
-    # chart grid
-    slots = [(24, 246, 760, 224), (800, 246, 456, 224), (24, 480, 620, 228), (660, 480, 596, 228)]
-    m1 = heads[0] if heads else rows_name
-    m2 = heads[1] if len(heads) > 1 else rows_name
-    fmt1, fmt2 = fmts[m1], fmts[m2]
-    charts = []
-    if date:
-        charts.append(("lineChart", fld_col(table, "Month"), "Month", m1, fmt1, f"{m1} by month", False))
-    if dims:
-        charts.append(("clusteredBarChart", fld_col(table, dims[0]["name"]), dims[0]["name"], m1, fmt1, f"{m1} by {dims[0]['name']}", True))
-    if len(dims) > 1:
-        charts.append(("clusteredBarChart", fld_col(table, dims[1]["name"]), dims[1]["name"], m2, fmt2, f"{m2} by {dims[1]['name']}", True))
-    elif len(dims) == 1 and len(heads) > 1:
-        charts.append(("clusteredColumnChart", fld_col(table, dims[0]["name"]), dims[0]["name"], m2, fmt2, f"{m2} by {dims[0]['name']}", True))
-    small = [d for d in dims if d["distinct"] <= 6]
-    if small:
-        d = small[0]
-        charts.append(("donutChart", fld_col(table, d["name"]), d["name"], rows_name, "#,0", f"Share of rows by {d['name']}", True))
-    elif len(dims) > 2:
-        charts.append(("clusteredBarChart", fld_col(table, dims[2]["name"]), dims[2]["name"], m1, fmt1, f"{m1} by {dims[2]['name']}", True))
-    for slot, (kind, field, cname, meas, fmt, ttl, by_measure) in zip(slots, charts):
-        v1.append(v_chart(P1, kind, table, field, cname, meas, fmt, ttl, *slot, nz(), sort_by_measure=by_measure))
-    pages[P1] = ("Overview", v1)
+    sl = sl[:4]
 
-    # page 2: a details table and the same filters
-    v2 = [v_textbox(P2, "title", 24, 12, 1232, 44, nz(), [(f"{title}: details", {"fontSize": "22pt", "fontWeight": "bold"})])]
-    for i, (col, label, dd) in enumerate(sl):
-        v2.append(v_slicer(P2, table, col, label, 24 + i * (sw + 16), 62, sw, 78, nz(), dropdown=dd))
+    pages = []                    # (id, display name, visuals, page extras)
+
+    def dim_chart(page, dim, meas, pos, z, ttl=None):
+        kind = "clusteredColumnChart" if dim["name"] in col_dims else "clusteredBarChart"
+        return v_chart(page, kind, table, fld_col(table, dim["name"]), dim["name"], meas, fmts[meas], ttl or f"{meas} by {dim['name']}", *pos, z,
+                       sort_by_measure=dim["name"] not in int_dims, tip=tip_pid)
+
+    def new_page(key, heading):
+        pid = pid_of[key]
+        counter = [0]
+
+        def nz():
+            counter[0] += 10
+            return counter[0]
+
+        vis = [v_shape(pid, "nav-bg", 0, 0, NAV_W, 720, 1, NAVY),
+               v_textbox(pid, "nav-title", 14, 18, NAV_W - 24, 56, 2, [(title, {"fontSize": "13pt", "fontWeight": "bold", "color": "#FFFFFF"})])]
+        for i, k in enumerate(keys):
+            active = k == key
+            vis += v_button(pid, f"nav-{k}", 12, 96 + i * 44, NAV_W - 24, 36, 10 + 2 * i, labels[k], ("page", pid_of[k]),
+                            fill=TEAL if active else None, text_color="#FFFFFF" if active else "#CBD5E0", bold=active)
+        vis.append(v_textbox(pid, "title", CX, 14, CW, 40, nz() + 100, [(heading, {"fontSize": "20pt", "fontWeight": "bold", "color": INK})]))
+        pages.append((pid, labels[key], vis))
+        return pid, vis, nz
+
+    def g(x, y, w, h):
+        return (CX + x, y, w, h)
+
+    # ---- 1. Overview (F pattern: KPIs on top, the main trend wide on the left, details below)
+    pid, vis, nz = new_page("overview", title)
+    cards = [rows_name] + heads[:4]
+    gap = 12
+    cw = (CW - gap * (len(cards) - 1)) / len(cards)
+    trend_f = fld_col(table, "Month") if date else None
+    for i, name in enumerate(cards):
+        pos = (CX + i * (cw + gap), 64, cw, 110)
+        if date and name in heads[:3]:
+            z = nz()
+            nz(); nz()
+            vis += v_kpi(pid, table, name, fmts[name], trend_f, "Month", *pos, z)
+        else:
+            vis.append(v_card(pid, table, name, fmts[name], *pos, nz()))
+    main_w = round(CW * 0.61)
+    side_w = CW - main_w - gap
+    small = [d for d in dims if d["distinct"] <= 6]
+    if date:
+        vis.append(v_chart(pid, "lineChart", table, trend_f, "Month", m1, fmts[m1], f"{m1} by month", *g(0, 186, main_w, 232), nz(), sort_by_measure=False, tip=tip_pid))
+    elif dims:
+        vis.append(dim_chart(pid, dims[0], m1, g(0, 186, main_w, 232), nz()))
+    used = {dims[0]["name"]} if (dims and not date) else set()
+    if small:
+        d = next((x for x in small if x["name"] not in used), small[0])
+        vis.append(v_chart(pid, "donutChart", table, fld_col(table, d["name"]), d["name"], rows_name, fmts[rows_name], f"Share of rows by {d['name']}",
+                           *g(main_w + gap, 186, side_w, 232), nz(), tip=tip_pid))
+        used.add(d["name"])
+    rest = [d for d in dims if d["name"] not in used]
+    if rest:
+        vis.append(dim_chart(pid, rest[0], m2 if m2 != m1 or len(heads) < 2 else m1, g(0, 430, side_w, 278), nz()))
+    if len(rest) > 1:
+        vis.append(dim_chart(pid, rest[1], m1, g(side_w + gap, 430, main_w, 278), nz()))
+
+    # ---- 2. Breakdown: the main measure by each category, sizes varied
+    if "breakdown" in keys:
+        pid, vis, nz = new_page("breakdown", f"{m1} by category")
+        slots = [g(0, 64, main_w, 296), g(main_w + gap, 64, side_w, 296), g(0, 372, side_w, 336), g(side_w + gap, 372, main_w, 336)]
+        for slot, d in zip(slots, dims[:4]):
+            vis.append(dim_chart(pid, d, m1, slot, nz()))
+
+    # ---- 3. Compare
+    if "compare" in keys:
+        pid, vis, nz = new_page("compare", "Compare categories")
+        cat = next((d for d in dims if 4 <= d["distinct"] <= 40), dims[0])
+        vis.append(v_scatter(pid, table, fld_col(table, cat["name"]), cat["name"], m2, m1, rows_name, fmts, f"{m1} against {m2} by {cat['name']}",
+                             *g(0, 64, main_w, 296), nz(), tip=tip_pid))
+        tm = dims[1] if len(dims) > 1 else dims[0]
+        vis.append(v_treemap(pid, table, fld_col(table, tm["name"]), tm["name"], rows_name, fmts[rows_name], f"Rows by {tm['name']}",
+                             *g(main_w + gap, 64, side_w, 296), nz(), tip=tip_pid))
+        other = [d for d in dims if d is not tm and d is not cat] or [d for d in dims if d is not tm] or dims
+        slots = [g(0, 372, side_w, 336), g(side_w + gap, 372, main_w, 336)]
+        for i, slot in enumerate(slots):
+            vis.append(dim_chart(pid, other[i % len(other)], [m2, m3][i], slot, nz()))
+
+    # ---- 4. Trends
+    if "trends" in keys:
+        pid, vis, nz = new_page("trends", "Trends over time")
+        trend_measures = (list(heads[:3]) + [rows_name])[:4]
+        slots = [g(0, 64, main_w, 296), g(main_w + gap, 64, side_w, 296), g(0, 372, side_w, 336), g(side_w + gap, 372, main_w, 336)]
+        for slot, meas in zip(slots, trend_measures):
+            kind = "areaChart" if meas == rows_name else "lineChart"
+            vis.append(v_chart(pid, kind, table, trend_f, "Month", meas, fmts[meas], f"{meas} by month", *slot, nz(), sort_by_measure=False, tip=tip_pid))
+
+    # ---- 5. Matrix: a sorted bar instead of a table first, then the matrices
+    if "matrix" in keys:
+        pid, vis, nz = new_page("matrix", "Measures in a table")
+        mm = heads[:4] if heads else [rows_name]
+        vis.append(dim_chart(pid, dims[0], m1, g(0, 64, side_w, 644), nz()))
+        vis.append(v_matrix(pid, table, [dims[0]["name"]], [], [rows_name] + mm[:4], fmts, f"Measures by {dims[0]['name']}", *g(side_w + gap, 64, main_w, 296), nz()))
+        if len(dims) > 1:
+            vis.append(v_matrix(pid, table, [dims[0]["name"]], [dims[1]["name"]], [m1], fmts, f"{m1} by {dims[0]['name']} and {dims[1]['name']}",
+                                *g(side_w + gap, 372, main_w, 336), nz()))
+        else:
+            vis.append(v_table(pid, table, [dims[0]["name"]], mm[:3], "Summary", *g(side_w + gap, 372, main_w, 336), nz()))
+
+    # ---- 6. Details
+    pid, vis, nz = new_page("details", "Details")
     shown = [c["name"] for c in cols if c["kind"] != "empty"][:14]
-    v2.append(v_table(P2, table, shown, [rows_name], "Rows", 24, 150, 1232, 552, nz()))
-    pages[P2] = ("Details", v2)
+    vis.append(v_table(pid, table, shown, [rows_name], "Rows", *g(0, 64, CW, 644), nz()))
+
+    # ---- 7. About
+    pid = pid_of["about"]
+    pid, vis, nz = new_page("about", "About this report")
+    body, head = {"fontSize": "13pt", "color": INK}, {"fontSize": "15pt", "fontWeight": "bold", "color": INK}
+    runs = [(about or f"A report built from a table of {len(cols)} columns.", body), ("", None), ("How to use it", head),
+            ("Open the Filters pane on the right (the funnel tab) to filter by category or date; the selection applies to every page. Click a bar, a slice or a point to cross-filter the other charts, "
+             "and hover over one to see a small summary card.", body)]
+    if source:
+        runs += [("", None), ("Data source", head), (source, body)]
+    runs += [("", None), ("Measures", head)]
+    runs += [(f"{m[0]} = {m[1]}", body) for m in measures if m[3] in ("rows", "custom")]
+    vis.append(v_textbox(pid, "about", *g(0, 64, CW, 644), nz(), runs, card=True))
+
+    # ---- tooltip page (320 x 240): the three main measures for whatever the mouse is over
+    tip_vis = []
+    for i, name in enumerate([m1, m2, m3] if len({m1, m2, m3}) == 3 else list(dict.fromkeys([rows_name, m1, m2]))[:3]):
+        tip_vis.append(container(tip_pid, f"tip-{i}", 12, 12 + i * 76, 296, 68, 10 + i, {
+            "visualType": "cardVisual",
+            "query": {"queryState": {"Data": {"projections": [proj(fld_meas(table, name), table, name, fmts[name])]}}},
+            "visualContainerObjects": card_objects(), "drillFilterOtherVisuals": True}, scale=1))
 
     files = {
         "version.json": {"$schema": f"{SCHEMA}/versionMetadata/{V_VERSION}/schema.json", "version": "2.0.0"},
-        "pages/pages.json": {"$schema": f"{SCHEMA}/pagesMetadata/{V_PAGES}/schema.json", "pageOrder": [P1, P2], "activePageName": P1},
+        "pages/pages.json": {"$schema": f"{SCHEMA}/pagesMetadata/{V_PAGES}/schema.json", "pageOrder": [p[0] for p in pages] + [tip_pid], "activePageName": pages[0][0]},
     }
-    for pid, (pname, visuals) in pages.items():
+    for pid, pname, visuals in pages:
         files[f"pages/{pid}/page.json"] = {"$schema": f"{SCHEMA}/page/{V_PAGE}/schema.json", "name": pid, "displayName": pname,
                                            "displayOption": "FitToPage", "height": PAGE_H, "width": PAGE_W}
         for v in visuals:
             files[f"pages/{pid}/visuals/{v['name']}/visual.json"] = v
-    return files
+    files[f"pages/{tip_pid}/page.json"] = {"$schema": f"{SCHEMA}/page/{V_PAGE}/schema.json", "name": tip_pid, "displayName": "Tooltip", "displayOption": "ActualSize",
+                                           "height": 240, "width": 320, "type": "Tooltip", "visibility": "HiddenInViewMode",
+                                           "pageBinding": {"name": oid("binding", "tooltip"), "type": "Tooltip"},
+                                           "objects": {"pageSize": [{"properties": {"pageSizeTypes": tx("Tooltip"), "pageSizeWidth": num(320), "pageSizeHeight": num(240)}}]}}
+    for v in tip_vis:
+        files[f"pages/{tip_pid}/visuals/{v['name']}/visual.json"] = v
+    report_filters = []
+    for col, label, dd in sl:
+        f = {"name": oid("report-filter", col), "field": fld_col(table, col), "type": "Categorical" if dd else "Advanced", "howCreated": "User"}
+        report_filters.append(f)
+    return files, theme_json(), report_filters
 
 
 def find_base_theme():
@@ -422,14 +708,21 @@ def find_base_theme():
     return best
 
 
-def report_json(theme_name):
+CUSTOM_THEME = "pbigen_teal.json"
+
+
+def report_json(theme_name, filters=()):
     ver = IMPORT_VERSIONS
     return {"$schema": f"{SCHEMA}/report/{V_REPORT}/schema.json",
-            "themeCollection": {"baseTheme": {"name": theme_name, "reportVersionAtImport": ver, "type": "SharedResources"}},
+            "themeCollection": {"baseTheme": {"name": theme_name, "reportVersionAtImport": ver, "type": "SharedResources"},
+                                "customTheme": {"name": CUSTOM_THEME, "reportVersionAtImport": ver, "type": "RegisteredResources"}},
+            **({"filterConfig": {"filters": list(filters)}} if filters else {}),
             "objects": {"section": [{"properties": {"verticalAlignment": literal("Top")}}],
                         "outspacePane": [{"properties": {"expanded": {"expr": {"Literal": {"Value": "false"}}}}}]},
             "resourcePackages": [{"name": "SharedResources", "type": "SharedResources",
-                                  "items": [{"name": theme_name, "path": f"BaseThemes/{theme_name}.json", "type": "BaseTheme"}]}],
+                                  "items": [{"name": theme_name, "path": f"BaseThemes/{theme_name}.json", "type": "BaseTheme"}]},
+                                 {"name": "RegisteredResources", "type": "RegisteredResources",
+                                  "items": [{"name": CUSTOM_THEME, "path": CUSTOM_THEME, "type": "CustomTheme"}]}],
             "settings": {"useStylableVisualContainerHeader": True, "exportDataMode": "AllowSummarized", "defaultDrillFilterOtherVisuals": True,
                          "allowChangeFilterTypes": True, "useEnhancedTooltips": True, "useDefaultAggregateDisplayName": True}}
 
@@ -456,6 +749,11 @@ def main():
     ap.add_argument("--metrics", help="comma-separated numeric columns to build measures for")
     ap.add_argument("--dims", help="comma-separated categorical columns to use as slicers and chart axes")
     ap.add_argument("--culture", default="en-US")
+    ap.add_argument("--measure", action="append", help='custom DAX measure "Name=DAX|format" ({T} = table name); custom measures are used first in cards and charts')
+    ap.add_argument("--only-custom", action="store_true", help="build only the Rows measure and the --measure ones (no automatic Total/Average measures)")
+    ap.add_argument("--about", help="text for the About page (what the data is)")
+    ap.add_argument("--source", help="data source and licence, shown on the About page")
+    ap.add_argument("--embed", action="store_true", help="store the data inside the model (CSV only) so the project does not depend on the file's location")
     ap.add_argument("--open", action="store_true", help="open the project in Power BI Desktop when done (Windows)")
     args = ap.parse_args()
 
@@ -469,7 +767,17 @@ def main():
     table = table_name(data_path, args.name)
     name = table
     title = args.title or data_path.stem.replace("_", " ").title()
-    measures = build_measures(table, "Rows", metrics)
+    if args.only_custom:
+        metrics = []
+    custom = parse_custom_measures(args.measure, table)
+    measures = build_measures(table, "Rows", metrics, custom)
+    if args.embed:
+        if src["kind"] != "csv":
+            sys.exit("--embed works with CSV input only")
+        buf = io.StringIO()
+        df.to_csv(buf, index=False, quoting=csv.QUOTE_MINIMAL)
+        src["embedded"] = base64.b64encode(gzip.compress(buf.getvalue().encode("utf-8"), mtime=0)).decode("ascii")
+        src["delimiter"] = ","
 
     out = Path(args.out) / name
     if out.exists():
@@ -493,14 +801,21 @@ def main():
                                         "version": "4.0", "datasetReference": {"byPath": {"path": f"../{name}.SemanticModel"}}})
     theme_file = find_base_theme()
     theme_name = theme_file.stem if theme_file else FALLBACK_THEME
-    write_json(rp / "definition" / "report.json", report_json(theme_name))
+
     if theme_file:
         dest = rp / "StaticResources" / "SharedResources" / "BaseThemes" / theme_file.name
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(theme_file, dest)
-    for rel, obj in build_report(table, title, date, dims, metrics, measures, cols, None).items():
+    files, theme, report_filters = build_report(table, title, date, dims, metrics, measures, cols, args.about, args.source)
+    write_json(rp / "definition" / "report.json", report_json(theme_name, report_filters))
+    for rel, obj in files.items():
         write_json(rp / "definition" / rel, obj)
+    write_json(rp / "StaticResources" / "RegisteredResources" / CUSTOM_THEME, theme)
 
+    longest = max(len(str(f.resolve())) for f in out.rglob("*") if f.is_file())
+    if longest > 240:
+        print(f"WARNING: the longest file path is {longest} characters. Windows stops at 260 and Power BI Desktop will fail to open the project "
+              f"(\"Znaleziono problemy / Cannot read ...visual.json\"). Generate it in a shorter folder, for example --out C:/pbi.")
     print(f"read {len(df):,} rows x {len(cols)} columns from {data_path.name}")
     print(f"  date column : {date['name'] if date else '-'}")
     print(f"  dimensions  : {', '.join(d['name'] for d in dims[:6]) or '-'}")
