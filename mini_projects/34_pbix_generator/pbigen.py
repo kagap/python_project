@@ -298,8 +298,40 @@ def proj(field, table, name, fmt=None, active=False):
 # ---------------------------------------------------------------------------------------------------------------------
 # Report design: card layout, a three-colour palette, side navigation, the collapsible Filters pane, tooltip page, KPI sparklines
 # ---------------------------------------------------------------------------------------------------------------------
-NAVY, TEAL, ACCENT = "#1B2A49", "#0E7C86", "#F2994A"          # neutral dark, brand colour, accent used only to point things out
-INK, MUTED, BG, CARD, EDGE = "#2D3748", "#718096", "#F3F4F6", "#FFFFFF", "#E2E8F0"
+#   NAVY = navigation / header band, TEAL = brand colour (active tab, first series), ACCENT = the one colour that points things out,
+#   INK / MUTED = text, BG = page, CARD = card fill, EDGE = card border
+STYLES = {
+    "clean": dict(nav="left", nav_w=170, NAVY="#1B2A49", TEAL="#0E7C86", ACCENT="#F2994A", INK="#2D3748", MUTED="#718096", BG="#F3F4F6", CARD="#FFFFFF",
+                  EDGE="#E2E8F0", nav_text="#CBD5E0", nav_active_text="#FFFFFF", radius=8, border=1, dark=False, title_card=False, top_slicers=False,
+                  callout="INK", series=["#0E7C86", "#A0AEC0", "#F2994A", "#1B2A49", "#5BB5BD", "#CBD5E0", "#F6C28B", "#4A5568"]),
+    # dark navy, slicers in a strip at the top, tabs under the header (after a health-insurance dashboard)
+    "midnight": dict(nav="top", NAVY="#081226", TEAL="#4F86B8", ACCENT="#A9C7EC", INK="#E8F0FB", MUTED="#8FA6C8", BG="#0C1B38", CARD="#142B52",
+                     EDGE="#27487F", nav_text="#9DB4D6", nav_active_text="#0C1B38", radius=4, border=1, dark=True, title_card=False, top_slicers=True,
+                     callout="INK", series=["#4F86B8", "#9DB8E0", "#9FD3C7", "#C3A6D8", "#E8C77B", "#6F9FD0", "#7FC4B4", "#D9A5B8"]),
+    # dark brown with orange, title and tabs in one bar, thick orange card borders (after a YouTube analytics dashboard)
+    "sunset": dict(nav="top", NAVY="#1A0F0A", TEAL="#F26B1D", ACCENT="#FFC27A", INK="#FDEBDD", MUTED="#D9A98A", BG="#2B1A12", CARD="#3A2418",
+                   EDGE="#F26B1D", nav_text="#E8C3A5", nav_active_text="#1A0F0A", radius=0, border=2, dark=True, title_card=False, top_slicers=False,
+                   callout="TEAL", series=["#F26B1D", "#FFB347", "#C2410C", "#E9A66B", "#9A5530", "#FFD8A8", "#7A3E1D", "#F7926B"]),
+    # purple, left rail, round cards without borders, yellow accent (after an e-commerce sales dashboard)
+    "violet": dict(nav="left", nav_w=150, NAVY="#1E0E3C", TEAL="#8E5CFF", ACCENT="#F5B700", INK="#F6F0FF", MUTED="#CDBBF0", BG="#2E1659", CARD="#432380",
+                   EDGE="#6D3FC0", nav_text="#CDBBF0", nav_active_text="#1E0E3C", radius=16, border=0, dark=True, title_card=True, top_slicers=False,
+                   callout="ACCENT", series=["#F5B700", "#35C9B1", "#FF6B9A", "#8EC5FF", "#B388FF", "#FFA45B", "#7BE0AD", "#E0D4FF"]),
+}
+STYLE = dict(STYLES["clean"])
+NAVY = TEAL = ACCENT = INK = MUTED = BG = CARD = EDGE = ""
+STYLE_NAME = "clean"
+CUSTOM_THEME = "pbigen_clean.json"
+
+
+def apply_style(name):
+    """Make `name` the active style: the colours are module globals that the visual builders read."""
+    global NAVY, TEAL, ACCENT, INK, MUTED, BG, CARD, EDGE, STYLE, STYLE_NAME, CUSTOM_THEME, NAV_W, CX, CW
+    STYLE_NAME, STYLE = name, dict(STYLES[name])
+    NAVY, TEAL, ACCENT, INK, MUTED, BG, CARD, EDGE = (STYLE[k] for k in ("NAVY", "TEAL", "ACCENT", "INK", "MUTED", "BG", "CARD", "EDGE"))
+    CUSTOM_THEME = f"pbigen_{name}.json"
+    NAV_W = STYLE.get("nav_w", 0)
+    CX = NAV_W + 16 if STYLE["nav"] == "left" else 16
+    CW = 1280 - CX - 24 if STYLE["nav"] == "left" else 1280 - 32
 
 
 def lit(v):
@@ -335,7 +367,7 @@ def container(page, key, x, y, w, h, z, visual, hidden=False, scale=None):
 def card_objects(title=None):
     """A white card with a thin border and rounded corners, and a small bold title (or none)."""
     o = {"background": [{"properties": {"show": flag(True), "color": solid(CARD), "transparency": num(0)}}],
-         "border": [{"properties": {"show": flag(True), "color": solid(EDGE), "radius": num(8), "width": num(1)}}],
+         "border": [{"properties": {"show": flag(STYLE["border"] > 0), "color": solid(EDGE), "radius": num(STYLE["radius"]), "width": num(max(STYLE["border"], 1))}}],
          "subTitle": [{"properties": {"show": flag(False)}}]}
     o["title"] = [{"properties": {"show": flag(True), "text": tx(title), "fontColor": solid(INK), "fontSize": num(12), "bold": flag(True)}}] if title \
         else [{"properties": {"show": flag(False)}}]
@@ -343,21 +375,34 @@ def card_objects(title=None):
 
 
 def chart_objects(kind):
-    """Quiet charts: no gridlines, no value axis when the bars carry labels, no legend unless the chart needs one."""
+    """Quiet charts: no gridlines, no value axis when the bars carry labels, no legend unless the chart needs one; text in the style's colours."""
     off, on = flag(False), flag(True)
+    txt = {"labelColor": solid(MUTED)}
+    cat = {"showAxisTitle": off, "gridlineShow": off, "axisType": tx("Categorical"), **txt}          # numeric categories (hours, ids) stay categories
+    lab = {"show": on, "color": solid(INK)}
     if kind in ("clusteredBarChart", "clusteredColumnChart"):
-        return {"valueAxis": [{"properties": {"show": off, "gridlineShow": off}}], "categoryAxis": [{"properties": {"showAxisTitle": off}}],
-                "labels": [{"properties": {"show": on}}], "legend": [{"properties": {"show": off}}]}
+        return {"valueAxis": [{"properties": {"show": off, "gridlineShow": off, **txt}}], "categoryAxis": [{"properties": cat}],
+                "labels": [{"properties": lab}], "legend": [{"properties": {"show": off}}]}
     if kind in ("lineChart", "areaChart"):
-        return {"valueAxis": [{"properties": {"gridlineShow": off, "showAxisTitle": off}}], "categoryAxis": [{"properties": {"showAxisTitle": off}}],
+        return {"valueAxis": [{"properties": {"gridlineShow": off, "showAxisTitle": off, **txt}}], "categoryAxis": [{"properties": cat}],
                 "legend": [{"properties": {"show": off}}]}
     if kind == "scatterChart":
-        return {"legend": [{"properties": {"show": off}}], "valueAxis": [{"properties": {"gridlineShow": off}}], "categoryLabels": [{"properties": {"show": on}}]}
+        return {"legend": [{"properties": {"show": off}}], "valueAxis": [{"properties": {"gridlineShow": off, **txt}}],
+                "categoryAxis": [{"properties": {"gridlineShow": off, **txt}}], "categoryLabels": [{"properties": {"show": on, "color": solid(INK)}}]}
     if kind == "treemap":
-        return {"legend": [{"properties": {"show": off}}], "labels": [{"properties": {"show": on}}]}
+        return {"legend": [{"properties": {"show": off}}], "labels": [{"properties": lab}]}
     if kind == "donutChart":
-        return {"legend": [{"properties": {"show": on}}], "labels": [{"properties": {"show": on}}]}
+        return {"legend": [{"properties": {"show": on, "labelColor": solid(MUTED)}}], "labels": [{"properties": lab}]}
     return {}
+
+
+def grid_objects():
+    """Colours for tables and matrices (on a dark card the default white cells would be wrong)."""
+    head = {"fontColor": solid(INK), "backColor": solid(NAVY if STYLE["dark"] else "#EEF2F7")}
+    body = {"fontColor": solid(INK), "backColor": solid(CARD), "fontColorPrimary": solid(INK), "backColorPrimary": solid(CARD),
+            "fontColorSecondary": solid(INK), "backColorSecondary": solid(BG if STYLE["dark"] else "#F8FAFC")}
+    return {"columnHeaders": [{"properties": head}], "rowHeaders": [{"properties": {**head, "backColor": solid(CARD)}}], "values": [{"properties": body}],
+            "grid": [{"properties": {"gridVertical": flag(False), "gridHorizontalColor": solid(EDGE), "outlineColor": solid(EDGE)}}]}
 
 
 def tooltip_obj(tip_page):
@@ -385,7 +430,7 @@ def v_shape(page, key, x, y, w, h, z, fill, hidden=False, border=False, radius=0
     return container(page, key, x, y, w, h, z, v, hidden=hidden)
 
 
-def v_button(page, key, x, y, w, h, z, label, action, fill=None, text_color=CARD, size=11, bold=False, hidden=False):
+def v_button(page, key, x, y, w, h, z, label, action, fill=None, text_color="#FFFFFF", size=11, bold=False, hidden=False):
     """A text button: a text box (with an optional coloured background) that carries the click action itself.
     action = ('page', page_name) or ('bookmark', bookmark_name)."""
     kind, target = action
@@ -430,15 +475,18 @@ def v_kpi(page, table, measure, fmt, trend_field, trend_name, x, y, w, h, z):
     return [number, spark]
 
 
-def v_slicer(page, table, col, label, x, y, w, h, z, dropdown=True, hidden=False):
+def v_slicer(page, table, col, label, x, y, w, h, z, dropdown=True, hidden=False, boxed=False):
     objects = {"header": [{"properties": {"show": flag(False)}}]}
     if dropdown:
         objects["data"] = [{"properties": {"mode": tx("Dropdown")}}]
+    if boxed:     # a dropdown in a filled box (dark styles)
+        objects["items"] = [{"properties": {"fontColor": solid(INK), "background": solid(CARD), "outline": solid(EDGE)}}]
     v = {"visualType": "slicer",
          "query": {"queryState": {"Values": {"projections": [proj(fld_col(table, col), table, col, active=True)]}}},
          "objects": objects,
          "visualContainerObjects": {"title": [{"properties": {"show": flag(True), "text": tx(label), "fontColor": solid(MUTED), "fontSize": num(10)}}],
-                                    "background": [{"properties": {"show": flag(False)}}], "border": [{"properties": {"show": flag(False)}}]},
+                                    "background": [{"properties": {"show": flag(boxed), "color": solid(CARD), "transparency": num(0)}}],
+                                    "border": [{"properties": {"show": flag(boxed), "color": solid(EDGE), "radius": num(STYLE["radius"] // 2), "width": num(1)}}]},
          "syncGroup": {"groupName": col, "fieldChanges": True, "filterChanges": True},
          "drillFilterOtherVisuals": True}
     return container(page, "slicer-" + col, x, y, w, h, z, v, hidden=hidden)
@@ -484,31 +532,31 @@ def v_matrix(page, table, rows, columns, measures, fmts, title, x, y, w, h, z):
              "Values": {"projections": [proj(fld_meas(table, m), table, m, fmts[m]) for m in measures]}}
     if columns:
         state["Columns"] = {"projections": [proj(fld_col(table, c), table, c, active=True) for c in columns]}
-    v = {"visualType": "pivotTable", "query": {"queryState": state}, "visualContainerObjects": card_objects(title), "drillFilterOtherVisuals": True}
+    v = {"visualType": "pivotTable", "query": {"queryState": state}, "objects": grid_objects(), "visualContainerObjects": card_objects(title), "drillFilterOtherVisuals": True}
     return container(page, f"matrix-{'-'.join(rows)}-{'-'.join(columns)}", x, y, w, h, z, v)
 
 
 def v_table(page, table, columns, extra_measures, title, x, y, w, h, z):
     projections = [proj(fld_col(table, c), table, c) for c in columns] + [proj(fld_meas(table, m), table, m) for m in extra_measures]
-    v = {"visualType": "tableEx", "query": {"queryState": {"Values": {"projections": projections}}},
+    v = {"visualType": "tableEx", "query": {"queryState": {"Values": {"projections": projections}}}, "objects": grid_objects(),
          "visualContainerObjects": card_objects(title), "drillFilterOtherVisuals": True}
     return container(page, "table-" + title, x, y, w, h, z, v)
 
 
 def theme_json():
-    colors = [TEAL, "#A0AEC0", ACCENT, NAVY, "#5BB5BD", "#CBD5E0", "#F6C28B", "#4A5568"]
-    return {"name": "pbigen teal", "dataColors": colors, "background": CARD, "foreground": INK, "tableAccent": TEAL,
-            "good": TEAL, "neutral": "#A0AEC0", "bad": ACCENT, "maximum": TEAL, "center": "#A0AEC0", "minimum": ACCENT,
-            "textClasses": {"callout": {"fontSize": 26, "fontFace": "Segoe UI Semibold", "color": INK},
+    call = {"INK": INK, "TEAL": TEAL, "ACCENT": ACCENT}[STYLE["callout"]]
+    return {"name": f"pbigen {STYLE_NAME}", "dataColors": STYLE["series"], "background": CARD, "foreground": INK, "tableAccent": TEAL,
+            "good": TEAL, "neutral": MUTED, "bad": ACCENT, "maximum": TEAL, "center": MUTED, "minimum": ACCENT,
+            "textClasses": {"callout": {"fontSize": 26, "fontFace": "Segoe UI Semibold", "color": call},
                             "title": {"fontSize": 12, "fontFace": "Segoe UI Semibold", "color": INK},
                             "header": {"fontSize": 12, "fontFace": "Segoe UI Semibold", "color": INK},
                             "label": {"fontSize": 10, "fontFace": "Segoe UI", "color": MUTED}},
             "visualStyles": {"page": {"*": {"background": [{"color": {"solid": {"color": BG}}, "transparency": 0}],
-                                            "outspace": [{"color": {"solid": {"color": "#E5E7EB"}}, "transparency": 0}]}}}}
+                                            "outspace": [{"color": {"solid": {"color": NAVY if STYLE["dark"] else "#E5E7EB"}}, "transparency": 0}]}}}}
 
 
-NAV_W = 170
-CX, CW = NAV_W + 16, 1280 - NAV_W - 16 - 24            # content column: x and width on the 1280 grid
+NAV_W, CX, CW = 0, 16, 1248                           # content column on the 1280 grid, set by apply_style
+apply_style("clean")
 
 
 def build_report(table, title, date, dims, metrics, measures, cols, about=None, source=None):
@@ -535,6 +583,9 @@ def build_report(table, title, date, dims, metrics, measures, cols, about=None, 
     for d in dims[:3 if date else 4]:
         sl.append((d["name"], d["name"], True))
     sl = sl[:4]
+    strip = [d["name"] for d in dims[:4]] if STYLE["top_slicers"] else []          # dropdowns in the header
+    top = {"clean": 64, "violet": 64, "sunset": 66, "midnight": 108}[STYLE_NAME]     # where the content starts on the 720 grid
+    ys, hs = (708 - top) / 644, (708 - top) / 644
 
     pages = []                    # (id, display name, visuals, page extras)
 
@@ -551,18 +602,41 @@ def build_report(table, title, date, dims, metrics, measures, cols, about=None, 
             counter[0] += 10
             return counter[0]
 
-        vis = [v_shape(pid, "nav-bg", 0, 0, NAV_W, 720, 1, NAVY),
-               v_textbox(pid, "nav-title", 14, 18, NAV_W - 24, 56, 2, [(title, {"fontSize": "13pt", "fontWeight": "bold", "color": "#FFFFFF"})])]
-        for i, k in enumerate(keys):
-            active = k == key
-            vis += v_button(pid, f"nav-{k}", 12, 96 + i * 44, NAV_W - 24, 36, 10 + 2 * i, labels[k], ("page", pid_of[k]),
-                            fill=TEAL if active else None, text_color="#FFFFFF" if active else "#CBD5E0", bold=active)
-        vis.append(v_textbox(pid, "title", CX, 14, CW, 40, nz() + 100, [(heading, {"fontSize": "20pt", "fontWeight": "bold", "color": INK})]))
+        if STYLE["nav"] == "left":
+            vis = [v_shape(pid, "nav-bg", 0, 0, NAV_W, 720, 1, NAVY),
+                   v_textbox(pid, "nav-title", 14, 18, NAV_W - 24, 56, 2, [(title, {"fontSize": "13pt", "fontWeight": "bold", "color": "#FFFFFF"})])]
+            for i, k in enumerate(keys):
+                active = k == key
+                vis += v_button(pid, f"nav-{k}", 12, 96 + i * 44, NAV_W - 24, 36, 10 + 2 * i, labels[k], ("page", pid_of[k]),
+                                fill=ACCENT if STYLE_NAME == "violet" and active else (TEAL if active else None),
+                                text_color=STYLE["nav_active_text"] if active and STYLE_NAME == "violet" else ("#FFFFFF" if active else STYLE["nav_text"]), bold=active)
+            head = v_textbox(pid, "title", CX, 14, CW, 40, nz() + 100, [(heading, {"fontSize": "20pt", "fontWeight": "bold", "color": INK})], card=STYLE["title_card"])
+            vis.append(head)
+        else:
+            hh = 56 if STYLE_NAME == "midnight" else 52
+            vis = [v_shape(pid, "nav-bg", 0, 0, 1280, hh, 1, NAVY),
+                   v_textbox(pid, "nav-title", 14, 8 if STYLE_NAME == "midnight" else 10, 300 if STYLE_NAME == "midnight" else 330, 40, 2,
+                             [(title, {"fontSize": "14pt", "fontWeight": "bold", "color": INK if STYLE_NAME == "midnight" else TEAL})])]
+            if STYLE_NAME == "midnight":           # tabs in a row under the header, dropdown filters in the header
+                bw = 112
+                for i, k in enumerate(keys):
+                    active = k == key
+                    vis += v_button(pid, f"nav-{k}", 16 + i * (bw + 6), 64, bw, 30, 10 + 2 * i, labels[k], ("page", pid_of[k]),
+                                    fill=TEAL if active else CARD, text_color=STYLE["nav_active_text"] if active else STYLE["nav_text"], bold=active, size=10)
+                sw = (1280 - 330 - 16 - 3 * 10) / 4
+                for i, dn in enumerate(strip):
+                    vis.append(v_slicer(pid, table, dn, dn, 330 + i * (sw + 10), 4, sw, 50, 40 + i, boxed=True))
+            else:                                  # sunset: title and tabs share one bar
+                bw = min(116, (1280 - 360 - 16) / len(keys) - 6)
+                for i, k in enumerate(keys):
+                    active = k == key
+                    vis += v_button(pid, f"nav-{k}", 360 + i * (bw + 6), 11, bw, 30, 10 + 2 * i, labels[k], ("page", pid_of[k]),
+                                    fill=TEAL if active else CARD, text_color=STYLE["nav_active_text"] if active else STYLE["nav_text"], bold=active, size=10)
         pages.append((pid, labels[key], vis))
         return pid, vis, nz
 
     def g(x, y, w, h):
-        return (CX + x, y, w, h)
+        return (CX + x, round(top + (y - 64) * ys, 1), w, round(h * hs, 1))
 
     # ---- 1. Overview (F pattern: KPIs on top, the main trend wide on the left, details below)
     pid, vis, nz = new_page("overview", title)
@@ -571,7 +645,7 @@ def build_report(table, title, date, dims, metrics, measures, cols, about=None, 
     cw = (CW - gap * (len(cards) - 1)) / len(cards)
     trend_f = fld_col(table, "Month") if date else None
     for i, name in enumerate(cards):
-        pos = (CX + i * (cw + gap), 64, cw, 110)
+        pos = g(i * (cw + gap), 64, cw, 110)
         if date and name in heads[:3]:
             z = nz()
             nz(); nz()
@@ -682,6 +756,8 @@ def build_report(table, title, date, dims, metrics, measures, cols, about=None, 
         files[f"pages/{tip_pid}/visuals/{v['name']}/visual.json"] = v
     report_filters = []
     for col, label, dd in sl:
+        if col in strip:
+            continue            # already a dropdown in the header
         f = {"name": oid("report-filter", col), "field": fld_col(table, col), "type": "Categorical" if dd else "Advanced", "howCreated": "User"}
         report_filters.append(f)
     return files, theme_json(), report_filters
@@ -706,9 +782,6 @@ def find_base_theme():
         except (PermissionError, OSError):
             continue
     return best
-
-
-CUSTOM_THEME = "pbigen_teal.json"
 
 
 def report_json(theme_name, filters=()):
@@ -749,6 +822,8 @@ def main():
     ap.add_argument("--metrics", help="comma-separated numeric columns to build measures for")
     ap.add_argument("--dims", help="comma-separated categorical columns to use as slicers and chart axes")
     ap.add_argument("--culture", default="en-US")
+    ap.add_argument("--style", choices=sorted(STYLES), default="clean",
+                    help="look of the report: clean (light, left menu), midnight (dark blue, filters in the header), sunset (brown and orange, tabs on top), violet (purple, left menu)")
     ap.add_argument("--measure", action="append", help='custom DAX measure "Name=DAX|format" ({T} = table name); custom measures are used first in cards and charts')
     ap.add_argument("--only-custom", action="store_true", help="build only the Rows measure and the --measure ones (no automatic Total/Average measures)")
     ap.add_argument("--about", help="text for the About page (what the data is)")
@@ -756,6 +831,7 @@ def main():
     ap.add_argument("--embed", action="store_true", help="store the data inside the model (CSV only) so the project does not depend on the file's location")
     ap.add_argument("--open", action="store_true", help="open the project in Power BI Desktop when done (Windows)")
     args = ap.parse_args()
+    apply_style(args.style)
 
     data_path = Path(args.data).resolve()
     df, src = read_table(data_path, args.sheet)

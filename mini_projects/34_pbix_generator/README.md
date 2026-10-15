@@ -14,6 +14,7 @@ Power BI has no supported way to write a .pbix directly (its data model is a com
 | Option | What it does |
 |---|---|
 | `--name`, `--title` | project name and the title shown on the report |
+| `--style NAME` | look of the report: `clean` (light, menu on the left, default), `midnight` (dark blue, dropdown filters in the header, tabs under it), `sunset` (brown and orange, title and tabs in one bar) or `violet` (purple, menu on the left, round cards) |
 | `--date COLUMN` | date column for the time charts (default: the first date-like column) |
 | `--metrics a,b` | numeric columns to build `Total` and `Average` measures for (default: the first four non-ID numeric columns) |
 | `--dims x,y` | categorical columns for the filters and chart axes (default: text columns with 2 to 40 distinct values) |
@@ -33,6 +34,8 @@ python pbigen.py shoppers.csv --name OnlineShoppers --embed --only-custom --date
 ```
 
 ## What the report looks like
+
+Four styles are built in (`--style`): each has its own palette and its own header or navigation, so reports made from different data do not all look alike. The description below is of the default `clean` style; in the dark styles the cards, text and chart colours follow the style's palette.
 
 Overview, Breakdown, Compare, Trends (only if there is a date column), Matrix, Details and About pages, plus a hidden Tooltip page.
 
