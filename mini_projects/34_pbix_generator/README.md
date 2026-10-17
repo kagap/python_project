@@ -14,7 +14,9 @@ Power BI has no supported way to write a .pbix directly (its data model is a com
 | Option | What it does |
 |---|---|
 | `--name`, `--title` | project name and the title shown on the report |
-| `--style NAME` | look of the report: `clean` (light, menu on the left, default), `midnight` (dark blue, dropdown filters in the header, tabs under it), `sunset` (brown and orange, title and tabs in one bar) or `violet` (purple, menu on the left, round cards) |
+| `--style NAME` | look of the report: `clean` (light, menu on the left, default), `midnight` (dark blue, dropdown filters in the header, tabs under it), `sunset` (brown and orange, title and tabs in one bar), `violet` (purple, menu on the left, round cards), `neon` (near-black with cyan and magenta, tabs along the bottom), `paper` (cream, serif headline, text tabs) or `bordeaux` (warm white, burgundy menu on the right) |
+| `--layout NAME` | which pages and charts: `classic` (default: bars, donut, scatter, treemap, matrices), `pulse` (a time series: heat map, combo chart, gauge, waterfall, ribbon, 100% stacked columns), `flow` (categories and outcomes: funnel, ribbon, waterfall, pie, 100% stacked bars) or `lab` (numeric columns by type: gauge, multi-row card, small multiples, 100% stacked columns) |
+| `--rows-name` | name of the row-count measure, for example `Patients` or `Wines` |
 | `--date COLUMN` | date column for the time charts (default: the first date-like column) |
 | `--metrics a,b` | numeric columns to build `Total` and `Average` measures for (default: the first four non-ID numeric columns) |
 | `--dims x,y` | categorical columns for the filters and chart axes (default: text columns with 2 to 40 distinct values) |
@@ -35,7 +37,17 @@ python pbigen.py shoppers.csv --name OnlineShoppers --embed --only-custom --date
 
 ## What the report looks like
 
-Four styles are built in (`--style`): each has its own palette and its own header or navigation, so reports made from different data do not all look alike. The description below is of the default `clean` style; in the dark styles the cards, text and chart colours follow the style's palette.
+Seven styles (`--style`) and four layouts (`--layout`) are built in, so reports made from different data do not all look alike: a style is a palette plus a header or navigation (menu left, right, tabs on top or at the bottom, filters in the header), a layout is the set of pages and chart types. The description below is of the default `clean` style and `classic` layout; in the dark styles the cards, text and chart colours follow the style's palette.
+
+The three extra layouts take their columns by position, so list them in the order shown (with `--dims` and `--measure`):
+
+| Layout | `--dims` in order | `--measure` in order | Needs |
+|---|---|---|---|
+| `pulse` | hour-like axis, weekday-like columns, a segment, a part-of-day band | average (headline), total, a second average, a maximum, a share | a date column |
+| `flow` | ordered group (age), entry type, outcome in stage order, topic, sex, race, stay length, then up to four treatment fields | a rate, two averages, another average, an additive total | one row per case |
+| `lab` | item type, an ordered score, three bands | score, three averages, a share, another average | numeric columns |
+
+Examples: [`MetroTraffic_I94Volume`](https://github.com/kagap/powerbi/tree/main/MetroTraffic_I94Volume) (`neon` + `pulse`), [`DiabetesReadmission_US130Hospitals`](https://github.com/kagap/powerbi/tree/main/DiabetesReadmission_US130Hospitals) (`paper` + `flow`) and [`WineQuality_VinhoVerde`](https://github.com/kagap/powerbi/tree/main/WineQuality_VinhoVerde) (`bordeaux` + `lab`).
 
 Overview, Breakdown, Compare, Trends (only if there is a date column), Matrix, Details and About pages, plus a hidden Tooltip page.
 
