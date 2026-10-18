@@ -14,8 +14,8 @@ Power BI has no supported way to write a .pbix directly (its data model is a com
 | Option | What it does |
 |---|---|
 | `--name`, `--title` | project name and the title shown on the report |
-| `--style NAME` | look of the report: `clean` (light, menu on the left, default), `midnight` (dark blue, dropdown filters in the header, tabs under it), `sunset` (brown and orange, title and tabs in one bar), `violet` (purple, menu on the left, round cards), `neon` (near-black with cyan and magenta, tabs along the bottom), `paper` (cream, serif headline, text tabs) or `bordeaux` (warm white, burgundy menu on the right) |
-| `--layout NAME` | which pages and charts: `classic` (default: bars, donut, scatter, treemap, matrices), `pulse` (a time series: heat map, combo chart, gauge, waterfall, ribbon, 100% stacked columns), `flow` (categories and outcomes: funnel, ribbon, waterfall, pie, 100% stacked bars) or `lab` (numeric columns by type: gauge, multi-row card, small multiples, 100% stacked columns) |
+| `--style NAME` | look of the report: `clean` (light, menu on the left, default), `midnight` (dark blue, dropdown filters in the header, tabs under it), `sunset` (brown and orange, title and tabs in one bar), `violet` (purple, menu on the left, round cards), `neon` (near-black with cyan and magenta, tabs along the bottom), `paper` (cream, serif headline, text tabs) or `bordeaux` (warm white, burgundy menu on the right), `factory` (light grey, floating header card with pills, safety yellow), `chalk` (dark green with numbered chips for the pages) or `ash` (charcoal with a filter panel on the left and an air-quality colour scale) |
+| `--layout NAME` | which pages and charts: `classic` (default: bars, donut, scatter, treemap, matrices), `pulse` (a time series: heat map, combo chart, gauge, waterfall, ribbon, 100% stacked columns), `flow` (categories and outcomes: funnel, ribbon, waterfall, pie, 100% stacked bars) `lab` (numeric columns by type: gauge, multi-row card, small multiples, 100% stacked columns), `board` (a scoreboard: ranked table with shaded cells, outcomes against target), `story` (insight cards beside the charts; takes six `--insight "BIG NUMBER|sentence"` options) or `mix` (stacked columns and bars over bands; needs a date) |
 | `--rows-name` | name of the row-count measure, for example `Patients` or `Wines` |
 | `--date COLUMN` | date column for the time charts (default: the first date-like column) |
 | `--metrics a,b` | numeric columns to build `Total` and `Average` measures for (default: the first four non-ID numeric columns) |
@@ -37,7 +37,7 @@ python pbigen.py shoppers.csv --name OnlineShoppers --embed --only-custom --date
 
 ## What the report looks like
 
-Seven styles (`--style`) and four layouts (`--layout`) are built in, so reports made from different data do not all look alike: a style is a palette plus a header or navigation (menu left, right, tabs on top or at the bottom, filters in the header), a layout is the set of pages and chart types. The description below is of the default `clean` style and `classic` layout; in the dark styles the cards, text and chart colours follow the style's palette.
+Ten styles (`--style`) and seven layouts (`--layout`) are built in, so reports made from different data do not all look alike: a style is a palette plus a header or navigation (menu left, right, tabs on top or at the bottom, filters in the header), a layout is the set of pages and chart types. The description below is of the default `clean` style and `classic` layout; in the dark styles the cards, text and chart colours follow the style's palette.
 
 The three extra layouts take their columns by position, so list them in the order shown (with `--dims` and `--measure`):
 
@@ -46,6 +46,9 @@ The three extra layouts take their columns by position, so list them in the orde
 | `pulse` | hour-like axis, weekday-like columns, a segment, a part-of-day band | average (headline), total, a second average, a maximum, a share | a date column |
 | `flow` | ordered group (age), entry type, outcome in stage order, topic, sex, race, stay length, then up to four treatment fields | a rate, two averages, another average, an additive total | one row per case |
 | `lab` | item type, an ordered score, three bands | score, three averages, a share, another average | numeric columns |
+| `board` | department, team, day, week, target outcome, incentive band, overtime band, style changes | actual (headline), share on target, target, overtime, incentive | a date for the Trend page |
+| `story` | subject, sex, study time, mother's education, past failures, weekend alcohol, going out, result, absence band, wants higher education, mother's job, internet | final grade, pass rate, absences, first-period grade, a share | six `--insight` cards |
+| `mix` | season, wind, concentration band (in order), heating season, hour | average (headline), a share, temperature, a maximum, wind speed | a date column |
 
 Examples: [`MetroTraffic_I94Volume`](https://github.com/kagap/powerbi/tree/main/MetroTraffic_I94Volume) (`neon` + `pulse`), [`DiabetesReadmission_US130Hospitals`](https://github.com/kagap/powerbi/tree/main/DiabetesReadmission_US130Hospitals) (`paper` + `flow`) and [`WineQuality_VinhoVerde`](https://github.com/kagap/powerbi/tree/main/WineQuality_VinhoVerde) (`bordeaux` + `lab`).
 
