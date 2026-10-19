@@ -257,7 +257,7 @@ def m_query(src, table, cols, date_col, path):
     return f"let\n\t\t\t\t{body}\n\t\t\tin\n\t\t\t\t{last}"
 
 
-def tmdl_table(table, cols, date_col, measures, m):
+def tmdl_table(table, cols, date_col, measures, m, geo=None):
     out = [f"table {tq(table)}", f"\tlineageTag: {gid(table)}", ""]
     for name, dax, fmt, _ in measures:
         out += [f"\tmeasure {tq(name)} = {dax}", f"\t\tformatString: {fmt}", f"\t\tlineageTag: {gid(table, 'm', name)}", ""]
@@ -271,6 +271,8 @@ def tmdl_table(table, cols, date_col, measures, m):
         if date_col and name == "Month":
             fmt = "mmm yyyy"
         out += [f"\tcolumn {tq(name)}", f"\t\tdataType: {dt}"]
+        if geo and name in geo:
+            out.append(f"\t\tdataCategory: {geo[name]}")
         if fmt:
             out.append(f"\t\tformatString: {fmt}")
         out += [f"\t\tlineageTag: {gid(table, 'c', name)}", f"\t\tsummarizeBy: {summ}", f"\t\tsourceColumn: {tv(name)}", ""]
@@ -342,6 +344,21 @@ STYLES = {
                 EDGE="#3C434F", nav_text="#B5BEC9", nav_active_text="#14171C", radius=6, border=1, dark=True, title_card=False, top_slicers=False,
                 callout="ACCENT", heat=("#2A2F38", "#F29B38", "#E5533D"),
                 series=["#5CC689", "#F2D14B", "#F29B38", "#E5533D", "#A04FC7", "#7A1F3D", "#6AA9E9", "#9AA5B1"]),
+    # slate blue with lightning yellow, a slim numbered rail on the left (a weather map)
+    "storm": dict(nav="rail", nav_w=108, top=74, NAVY="#0B1320", TEAL="#FFD60A", ACCENT="#38BDF8", INK="#E6EEF8", MUTED="#8DA2BC", BG="#111B27", CARD="#18283A",
+                  EDGE="#2A4058", nav_text="#9FB3CC", nav_active_text="#0B1320", radius=8, border=1, dark=True, title_card=False, top_slicers=False,
+                  callout="TEAL", heat=("#18283A", "#2F7DB5", "#FFD60A"),
+                  series=["#FFD60A", "#38BDF8", "#F97316", "#A78BFA", "#34D399", "#F43F5E", "#E2E8F0", "#64748B"]),
+    # black screen with amber monospace text and function-key tabs (a market terminal)
+    "terminal": dict(nav="top", header="terminal", top=40, font="Consolas", NAVY="#000000", TEAL="#FFB000", ACCENT="#00D26A", INK="#FFB000", MUTED="#B07A00", BG="#000000",
+                     CARD="#0B0B0B", EDGE="#4A3A00", nav_text="#FFB000", nav_active_text="#000000", radius=0, border=1, dark=True, title_card=False, top_slicers=False,
+                     callout="INK", heat=("#0B0B0B", "#7A5200", "#FFB000"),
+                     series=["#FFB000", "#00D26A", "#FF4D4D", "#4DA3FF", "#E0E0E0", "#B07A00", "#C792EA", "#00BFA5"]),
+    # cream paper, racing red and a floating dock for the pages (a car showroom)
+    "garage": dict(nav="dock", top=62, bottom=660, NAVY="#1E1E24", TEAL="#D62828", ACCENT="#F4A100", INK="#1E1E24", MUTED="#7A7468", BG="#F4EFE6", CARD="#FFFFFF",
+                   EDGE="#E2D8C6", nav_text="#E8E4DA", nav_active_text="#FFFFFF", radius=18, border=1, dark=False, title_card=False, top_slicers=False,
+                   callout="TEAL", heat=("#FFFFFF", "#F6C28B", "#D62828"),
+                   series=["#D62828", "#1E1E24", "#F4A100", "#3A7CA5", "#8D99AE", "#2A9D8F", "#E76F51", "#6D597A"]),
     # warm white with a burgundy rail on the right-hand side
     "bordeaux": dict(nav="right", nav_w=180, NAVY="#4A1424", TEAL="#8C2740", ACCENT="#C9A227", INK="#2B1A1F", MUTED="#7A6168", BG="#F6F1EE", CARD="#FFFFFF",
                      EDGE="#E6D9D4", nav_text="#E8CDD3", nav_active_text="#4A1424", radius=10, border=1, dark=False, title_card=False, top_slicers=False,
@@ -362,8 +379,8 @@ def apply_style(name):
     CUSTOM_THEME = f"pbigen_{name}.json"
     NAV_W = STYLE.get("nav_w", 0)
     STYLE.setdefault("top", 64), STYLE.setdefault("bottom", 708), STYLE.setdefault("font", "Segoe UI")
-    CX = NAV_W + 16 if STYLE["nav"] in ("left", "split") else 16
-    CW = {"left": 1280 - CX - 24, "right": 1280 - NAV_W - 32, "split": 1280 - CX - 16}.get(STYLE["nav"], 1280 - 32)
+    CX = NAV_W + 16 if STYLE["nav"] in ("left", "split", "rail") else 16
+    CW = {"left": 1280 - CX - 24, "right": 1280 - NAV_W - 32, "split": 1280 - CX - 16, "rail": 1280 - CX - 16}.get(STYLE["nav"], 1280 - 32)
 
 
 def lit(v):
@@ -442,7 +459,8 @@ def tooltip_obj(tip_page):
 
 
 def v_textbox(page, key, x, y, w, h, z, runs, card=False, scale=None):
-    paragraphs = [{"textRuns": [{"value": text, **({"textStyle": style} if style else {})}]} for text, style in runs]
+    font = {"fontFamily": STYLE["font"]} if STYLE["font"] != "Segoe UI" else {}
+    paragraphs = [{"textRuns": [{"value": text, **({"textStyle": {**font, **style}} if style else {})}]} for text, style in runs]
     v = {"visualType": "textbox", "objects": {"general": [{"properties": {"paragraphs": paragraphs}}]}, "drillFilterOtherVisuals": True}
     if card:
         v["visualContainerObjects"] = card_objects()
@@ -468,7 +486,7 @@ def v_button(page, key, x, y, w, h, z, label, action, fill=None, text_color="#FF
     kind, target = action
     link = {"show": flag(True), "type": tx("PageNavigation" if kind == "page" else "Bookmark")}
     link["navigationSection" if kind == "page" else "bookmark"] = tx(target)
-    style = {"fontSize": f"{size}pt", "color": text_color, **({"fontWeight": "bold"} if bold else {})}
+    style = {"fontSize": f"{size}pt", "color": text_color, **({"fontWeight": "bold"} if bold else {}), **({"fontFamily": STYLE["font"]} if STYLE["font"] != "Segoe UI" else {})}
     bg = ({"show": flag(True), "color": solid(fill), "transparency": num(0)} if fill else {"show": flag(False)})
     v = {"visualType": "textbox",
          "objects": {"general": [{"properties": {"paragraphs": [{"textRuns": [{"value": label, "textStyle": style}], "horizontalTextAlignment": "center"}]}}]},
@@ -577,7 +595,14 @@ def v_table(page, table, columns, extra_measures, title, x, y, w, h, z):
     return container(page, "table-" + title, x, y, w, h, z, v)
 
 
-def kind_objects(kind, legend=False, axis=None, units=None):
+def map_ramp():
+    """The colour ramp of a filled map: from the middle to the strong end of the style's heat colours."""
+    lo, mid, hi = STYLE["heat"]
+    return {"linearGradient2": {"min": {"color": {"Literal": {"Value": "'" + mid + "'"}}}, "max": {"color": {"Literal": {"Value": "'" + hi + "'"}}},
+                                "nullColoringStrategy": {"strategy": {"Literal": {"Value": "'noColor'"}}}}}
+
+
+def kind_objects(kind, legend=False, axis=None, units=None, categorical=True):
     """Formatting for the chart types the layouts add (combo, stacked area, ribbon, funnel, waterfall, gauge, 100% stacked, pie, multi-row card)."""
     off, on = flag(False), flag(True)
     txt = {"labelColor": solid(MUTED)}
@@ -589,7 +614,7 @@ def kind_objects(kind, legend=False, axis=None, units=None):
         return {"categoryAxis": [{"properties": {**cat, "axisType": tx("Categorical")}}], "valueAxis": [{"properties": {**val, "show": off}}],
                 "labels": [{"properties": lab}], "legend": leg}
     if kind in ("lineChart", "areaChart", "stackedAreaChart", "ribbonChart", "lineClusteredColumnComboChart"):
-        return {"categoryAxis": [{"properties": {**cat, "axisType": tx("Categorical")} if kind in ("ribbonChart",) else cat}],
+        return {"categoryAxis": [{"properties": {**cat, "axisType": tx("Categorical")} if kind in ("ribbonChart",) or (categorical and kind in ("lineChart", "areaChart")) else cat}],
                 "valueAxis": [{"properties": val}], "legend": leg}
     on_bar = {"show": on, "color": solid(NAVY if STYLE["dark"] else "#FFFFFF"), **({"labelDisplayUnits": num(units)} if units else {})}      # labels sit on the bars
     if kind == "funnel":
@@ -601,6 +626,10 @@ def kind_objects(kind, legend=False, axis=None, units=None):
         if axis:
             o["axis"] = [{"properties": {"min": num(axis[0]), "max": num(axis[1])}}]
         return o
+    if kind == "filledMap":
+        return {"legend": [{"properties": {"show": off}}], "dataPoint": [{"properties": {"fillRule": map_ramp()}}]}
+    if kind == "map":
+        return {"legend": leg}
     if kind == "pieChart":
         return {"legend": [{"properties": {"show": on, "position": tx("Right"), "labelColor": solid(MUTED)}}], "labels": [{"properties": lab}]}
     if kind == "multiRowCard":
@@ -609,13 +638,16 @@ def kind_objects(kind, legend=False, axis=None, units=None):
     return chart_objects(kind)
 
 
-def v_gen(page, key, kind, table, roles, fmts, title, x, y, w, h, z, tip=None, sort=None, legend=False, axis=None, units=None):
+def v_gen(page, key, kind, table, roles, fmts, title, x, y, w, h, z, tip=None, sort=None, legend=False, axis=None, units=None, vfilter=None, ranges=None, no_labels=False):
     """Any chart: roles = {role: [("c", column) | ("m", measure)]}; sort = ("c" | "m", name, "Ascending" | "Descending")."""
     state = {}
     for role, items in roles.items():
         projs = []
         for typ, name in items:
-            if typ == "c":
+            if typ == "c" and kind == "scatterChart" and role in ("X", "Y"):
+                projs.append({"field": {"Aggregation": {"Expression": fld_col(table, name), "Function": 1}}, "queryRef": f"Average({table}.{name})",
+                              "nativeQueryRef": f"Average of {name}", "active": True})
+            elif typ == "c":
                 projs.append(proj(fld_col(table, name), table, name, active=True))
             else:
                 projs.append(proj(fld_meas(table, name), table, name, fmts[name], active=(kind == "scatterChart" and role in ("X", "Y"))))
@@ -626,10 +658,24 @@ def v_gen(page, key, kind, table, roles, fmts, title, x, y, w, h, z, tip=None, s
         q["sortDefinition"] = {"sort": [{"field": fld_col(table, name) if typ == "c" else fld_meas(table, name), "direction": direction}], "isDefaultSort": True}
     vco = card_objects(title)
     vco.update(tooltip_obj(tip))
-    v = {"visualType": kind, "query": q, "objects": kind_objects(kind, legend, axis, units), "visualContainerObjects": vco, "drillFilterOtherVisuals": True}
+    v = {"visualType": kind, "query": q, "objects": kind_objects(kind, legend, axis, units, not any(r == "Category" and typ == "c" and name in ("Month", "Date") for r, items in roles.items() for typ, name in items)), "visualContainerObjects": vco, "drillFilterOtherVisuals": True}
     if not v["objects"]:
         del v["objects"]
-    return container(page, f"{kind}-{key}", x, y, w, h, z, v)
+    if no_labels and kind == "scatterChart":       # a scatter of many points: no labels, no axis titles
+        v["objects"]["categoryLabels"][0]["properties"]["show"] = flag(False)
+        for axis_name in ("categoryAxis", "valueAxis"):
+            v["objects"][axis_name][0]["properties"]["showAxisTitle"] = flag(False)
+    if ranges and kind == "scatterChart":          # ((x min, x max), (y min, y max))
+        for axis_name, (lo, hi) in zip(("categoryAxis", "valueAxis"), ranges):
+            v["objects"][axis_name][0]["properties"].update({"start": num(lo), "end": num(hi)})
+    cont = container(page, f"{kind}-{key}", x, y, w, h, z, v)
+    if vfilter:             # a visual-level filter: (column, [allowed values])
+        col, values = vfilter
+        cont["filterConfig"] = {"filters": [{"name": oid(page, key, "filter"), "field": fld_col(table, col), "type": "Categorical", "howCreated": "User",
+                                             "filter": {"Version": 2, "From": [{"Name": "t", "Entity": table, "Type": 0}],
+                                                        "Where": [{"Condition": {"In": {"Expressions": [{"Column": {"Expression": {"SourceRef": {"Source": "t"}}, "Property": col}}],
+                                                                                        "Values": [[{"Literal": {"Value": "'" + x + "'"}}] for x in values]}}}]}}]}
+    return cont
 
 
 def v_heat(page, table, rows_col, cols_col, measure, fmts, title, x, y, w, h, z):
@@ -642,12 +688,41 @@ def v_heat(page, table, rows_col, cols_col, measure, fmts, title, x, y, w, h, z)
             "FillRule": {"linearGradient3": {"min": colour(lo), "mid": colour(mid), "max": colour(hi),
                                              "nullColoringStrategy": {"strategy": {"Literal": {"Value": "'asZero'"}}}}}}}}}}
     objects = grid_objects(12)
-    objects["values"].append({"properties": {"backColor": rule}, "selector": {"data": [{"dataViewWildcard": {"matchingOption": 1}}], "metadata": f"{table}.{measure}"}})
+    text = {"solid": {"color": {"expr": {"FillRule": {"Input": fld_meas(table, measure), "FillRule": {"linearGradient2": {
+        "min": colour(INK), "max": colour(NAVY if STYLE["dark"] else "#FFFFFF"), "nullColoringStrategy": {"strategy": {"Literal": {"Value": "'asZero'"}}}}}}}}}}
+    objects["values"].append({"properties": {"backColor": rule, "fontColor": text}, "selector": {"data": [{"dataViewWildcard": {"matchingOption": 1}}], "metadata": f"{table}.{measure}"}})
     state = {"Rows": {"projections": [proj(fld_col(table, rows_col), table, rows_col, active=True)]},
              "Columns": {"projections": [proj(fld_col(table, cols_col), table, cols_col, active=True)]},
              "Values": {"projections": [proj(fld_meas(table, measure), table, measure, fmts[measure])]}}
     v = {"visualType": "pivotTable", "query": {"queryState": state}, "objects": objects, "visualContainerObjects": card_objects(title), "drillFilterOtherVisuals": True}
     return container(page, f"heat-{rows_col}-{cols_col}", x, y, w, h, z, v)
+
+
+def v_tilemap(page, table, row_col, col_col, label_measure, color_measure, fmts, title, x, y, w, h, z):
+    """A tile-grid map (one square per region, placed on a grid): a matrix of grid rows by grid columns whose cell text is `label_measure` and whose colour follows
+    `color_measure`. No map service is involved, so it works in Publish to web."""
+    lo, mid, hi = STYLE["heat"]
+
+    def rule(a, b, c3=None):
+        pts = {"min": {"color": {"Literal": {"Value": "'" + a + "'"}}}, "max": {"color": {"Literal": {"Value": "'" + b + "'"}}},
+               "nullColoringStrategy": {"strategy": {"Literal": {"Value": "'asZero'"}}}}
+        kind = "linearGradient2"
+        if c3:
+            pts["mid"], kind = {"color": {"Literal": {"Value": "'" + c3 + "'"}}}, "linearGradient3"
+        return {"solid": {"color": {"expr": {"FillRule": {"Input": fld_meas(table, color_measure), "FillRule": {kind: pts}}}}}}
+    selector = {"data": [{"dataViewWildcard": {"matchingOption": 1}}], "metadata": f"{table}.{label_measure}"}
+    objects = grid_objects(26)
+    hidden = {"fontColor": solid(CARD), "backColor": solid(CARD), "fontSize": num(8)}          # the grid numbers are hidden by painting them in the card colour
+    objects["columnHeaders"] = [{"properties": hidden}]
+    objects["rowHeaders"] = [{"properties": hidden}]
+    objects["subTotals"] = [{"properties": {"rowSubtotals": flag(False), "columnSubtotals": flag(False)}}]
+    objects["grid"] = [{"properties": {"gridVertical": flag(False), "gridHorizontal": flag(False), "rowPadding": num(18), "outlineColor": solid(CARD)}}]
+    objects["values"].append({"properties": {"backColor": rule(mid, hi), "fontColor": rule(INK, NAVY if STYLE["dark"] else "#FFFFFF")}, "selector": selector})
+    state = {"Rows": {"projections": [proj(fld_col(table, row_col), table, row_col, active=True)]},
+             "Columns": {"projections": [proj(fld_col(table, col_col), table, col_col, active=True)]},
+             "Values": {"projections": [proj(fld_meas(table, label_measure), table, label_measure)]}}
+    v = {"visualType": "pivotTable", "query": {"queryState": state}, "objects": objects, "visualContainerObjects": card_objects(title), "drillFilterOtherVisuals": True}
+    return container(page, f"tilemap-{label_measure}", x, y, w, h, z, v)
 
 
 def kpi_row(c, pid, vis, nz, names, y=64, h=110, spark=3):
@@ -938,6 +1013,155 @@ def layout_mix(c):
                      *g(sw + gap, 372, mw, 336), nz(), tip=tip, legend=True, sort=("c", wind, "Ascending")))
 
 
+def layout_atlas(c):
+    """Maps first: dims = state, strength group, month, decade, rating, hour; measures: 1 deaths, 2 injuries, 3 average length, 4 violent count, 5 deadly share, 6 average width;
+    measure 7 is the tile label (the state code); needs columns Grid_row, Grid_col, Tornado_id, Start_lat and Start_lon. Pages: Map (tile grid), States, Strength, Seasons, Dots."""
+    t, f, g, tip, gap = c.table, c.fmts, c.g, c.tip, c.gap
+    state, strength, month, decade, ef, hour = (c.d(i) for i in range(6))
+    m1, m2, m3, m4, m5, m6, tile = (c.m(i) for i in range(7))
+    rows = c.rows_name
+    mw = round(CW * 0.61)
+    sw = CW - mw - gap
+    w1 = round(CW * 0.6)
+    rw = CW - w1 - gap
+    pid, vis, nz = c.new_page("overview", c.title)
+    vis.append(v_tilemap(pid, t, "Grid_row", "Grid_col", tile, rows, f, f"{rows} by {state.lower()} (one square a state; the more tornadoes, the yellower)", *g(0, 64, w1, 644), nz()))
+    cw3 = (rw - 2 * gap) / 3
+    for i, name in enumerate([rows, m1, m4]):
+        vis.append(v_card(pid, t, name, f[name], *g(w1 + gap + i * (cw3 + gap), 64, cw3, 100), nz()))
+    vis.append(v_gen(pid, "decade", "columnChart", t, {"Category": [("c", decade)], "Y": [("m", rows)]}, f, f"{rows} by {decade.lower()}", *g(w1 + gap, 176, rw, 250), nz(), tip=tip,
+                     sort=("c", decade, "Ascending")))
+    vis.append(v_gen(pid, "strength", "donutChart", t, {"Category": [("c", strength)], "Y": [("m", rows)]}, f, f"{rows} by {strength.lower()}", *g(w1 + gap, 438, rw, 270), nz(), tip=tip,
+                     legend=True))
+
+    pid, vis, nz = c.new_page("states", "State by state")
+    lw = round(CW * 0.38)
+    vis.append(v_gen(pid, "deaths", "clusteredBarChart", t, {"Category": [("c", state)], "Y": [("m", m1)]}, f, f"{m1} by {state.lower()}", *g(0, 64, lw, 644), nz(), tip=tip,
+                     sort=("m", m1, "Descending")))
+    vis.append(v_treemap(pid, t, fld_col(t, state), state, rows, f[rows], f"{rows} by {state.lower()}", *g(lw + gap, 64, CW - lw - gap, 296), nz(), tip=tip))
+    vis.append(v_gen(pid, "scatter", "scatterChart", t, {"Category": [("c", state)], "X": [("m", rows)], "Y": [("m", m1)], "Size": [("m", m2)]}, f,
+                     f"{m1} against {rows.lower()} by {state.lower()}", *g(lw + gap, 372, CW - lw - gap, 336), nz(), tip=tip))
+
+    pid, vis, nz = c.new_page("strength", "From weak to violent")
+    vis.append(v_gen(pid, "funnel", "funnel", t, {"Category": [("c", ef)], "Y": [("m", rows)]}, f, f"{rows} by rating", *g(0, 64, mw, 296), nz(), tip=tip, sort=("c", ef, "Ascending")))
+    vis.append(v_gen(pid, "deaths", "clusteredColumnChart", t, {"Category": [("c", ef)], "Y": [("m", m1)]}, f, f"{m1} by rating", *g(mw + gap, 64, sw, 296), nz(), tip=tip,
+                     sort=("c", ef, "Ascending")))
+    vis.append(v_gen(pid, "share", "hundredPercentStackedColumnChart", t, {"Category": [("c", decade)], "Series": [("c", strength)], "Y": [("m", rows)]}, f,
+                     f"Share of {strength.lower()} by {decade.lower()}", *g(0, 372, mw, 336), nz(), tip=tip, legend=True, sort=("c", decade, "Ascending")))
+    vis.append(v_gen(pid, "size", "scatterChart", t, {"Category": [("c", ef)], "X": [("m", m3)], "Y": [("m", m6)], "Size": [("m", rows)]}, f, f"{m6} against {m3.lower()} by rating",
+                     *g(mw + gap, 372, sw, 336), nz(), tip=tip))
+
+    pid, vis, nz = c.new_page("seasons", "When tornadoes strike")
+    vis.append(v_gen(pid, "month", "columnChart", t, {"Category": [("c", month)], "Series": [("c", strength)], "Y": [("m", rows)]}, f, f"{rows} by month and {strength.lower()}", *g(0, 64, mw, 296),
+                     nz(), tip=tip, legend=True, sort=("c", month, "Ascending")))
+    vis.append(v_gen(pid, "hour", "lineChart", t, {"Category": [("c", hour)], "Y": [("m", rows)]}, f, f"{rows} by {hour.lower()} of the day", *g(mw + gap, 64, sw, 296), nz(), tip=tip,
+                     sort=("c", hour, "Ascending")))
+    vis.append(v_heat(pid, t, decade, month, rows, f, f"{rows}: {decade.lower()} by month", *g(0, 372, CW, 336), nz()))
+
+    pid, vis, nz = c.new_page("paths", "Where the violent ones started")
+    vis.append(v_gen(pid, "dots", "scatterChart", t, {"Category": [("c", "Tornado_id")], "Series": [("c", ef)], "X": [("c", "Start_lon")], "Y": [("c", "Start_lat")], "Size": [("m", m1)]}, f,
+                     "Violent tornadoes (EF4 and EF5) where they touched down (longitude against latitude), sized by deaths", *g(0, 64, w1, 644), nz(), tip=tip, legend=True,
+                     vfilter=(ef, ["EF4", "EF5"]), ranges=((-112, -70), (26, 50)), no_labels=True))
+    vis.append(v_card(pid, t, m4, f[m4], *g(w1 + gap, 64, (rw - gap) / 2, 100), nz()))
+    vis.append(v_card(pid, t, m5, f[m5], *g(w1 + gap + (rw - gap) / 2 + gap, 64, (rw - gap) / 2, 100), nz()))
+    vis.append(v_gen(pid, "dec", "columnChart", t, {"Category": [("c", decade)], "Y": [("m", m4)]}, f, f"{m4} by {decade.lower()}", *g(w1 + gap, 176, rw, 250), nz(), tip=tip,
+                     sort=("c", decade, "Ascending")))
+    vis.append(v_gen(pid, "st", "clusteredBarChart", t, {"Category": [("c", state)], "Y": [("m", m4)]}, f, f"{m4} by {state.lower()}", *g(w1 + gap, 438, rw, 270), nz(), tip=tip,
+                     sort=("m", m4, "Descending")))
+
+
+def layout_macro(c):
+    """Latest values and what changed: dims = recession flag, decade, inflation band, Fed stance; needs a date; measures 1 to 6 are latest values, 7 to 12 their change against a
+    year earlier, 13 to 19 averages (unemployment, inflation, Fed funds, 10-year, 2-year, mortgage, 10y-2y spread, payroll growth). Pages: Overview, Rates, Inflation, Cycles."""
+    t, f, g, tip, gap = c.table, c.fmts, c.g, c.tip, c.gap
+    rec, dec, infb, stance = (c.d(i) for i in range(4))
+    latest = [c.m(i) for i in range(6)]
+    change = [c.m(i) for i in range(6, 12)]
+    unemp, infl, fed, y10, y2, mort, spread, payroll = (c.m(i) for i in range(12, 20))
+    mw = round(CW * 0.61)
+    sw = CW - mw - gap
+    pid, vis, nz = c.new_page("overview", c.title)
+    cw6 = (CW - 5 * gap) / 6
+    for i in range(6):
+        vis.append(v_card(pid, t, latest[i], f[latest[i]], *g(i * (cw6 + gap), 64, cw6, 84), nz()))
+    for i in range(6):
+        vis.append(v_card(pid, t, change[i], f[change[i]], *g(i * (cw6 + gap), 156, cw6, 64), nz()))
+    vis.append(v_gen(pid, "combo", "lineClusteredColumnComboChart", t, {"Category": [("c", "Month")], "Y": [("m", unemp)], "Y2": [("m", infl)]}, f, f"{unemp} (columns) and {infl.lower()} (line)",
+                     *g(0, 232, mw, 240), nz(), tip=tip, legend=True, sort=("c", "Month", "Ascending")))
+    vis.append(v_gen(pid, "rates", "lineChart", t, {"Category": [("c", "Month")], "Y": [("m", fed), ("m", y10), ("m", mort)]}, f, "Fed funds, 10-year yield and mortgage rate", *g(mw + gap, 232, sw, 240), nz(),
+                     tip=tip, legend=True, sort=("c", "Month", "Ascending")))
+    vis.append(v_gen(pid, "spread", "areaChart", t, {"Category": [("c", "Month")], "Y": [("m", spread)]}, f, f"{spread} (below zero the yield curve is inverted)", *g(0, 484, mw, 224), nz(), tip=tip,
+                     sort=("c", "Month", "Ascending")))
+    vis.append(v_gen(pid, "phillips", "scatterChart", t, {"Category": [("c", "Year")], "Series": [("c", dec)], "X": [("m", unemp)], "Y": [("m", infl)]}, f, f"{infl} against {unemp.lower()}, one point a year",
+                     *g(mw + gap, 484, sw, 224), nz(), tip=tip, legend=True))
+
+    pid, vis, nz = c.new_page("rates", "Rates and the yield curve")
+    vis.append(v_gen(pid, "lines", "lineChart", t, {"Category": [("c", "Month")], "Y": [("m", y10), ("m", y2), ("m", fed)]}, f, "10-year yield, 2-year yield and Fed funds rate", *g(0, 64, CW, 296), nz(), tip=tip,
+                     legend=True, sort=("c", "Month", "Ascending")))
+    vis.append(v_gen(pid, "spread", "areaChart", t, {"Category": [("c", "Month")], "Y": [("m", spread)]}, f, spread, *g(0, 372, mw, 336), nz(), tip=tip, sort=("c", "Month", "Ascending")))
+    vis.append(v_gen(pid, "mort", "clusteredColumnChart", t, {"Category": [("c", dec)], "Y": [("m", mort)]}, f, f"{mort} by {dec.lower()}", *g(mw + gap, 372, sw, 336), nz(), tip=tip,
+                     sort=("c", dec, "Ascending")))
+
+    pid, vis, nz = c.new_page("jobs", "Prices and jobs")
+    vis.append(v_gen(pid, "infl", "lineChart", t, {"Category": [("c", "Month")], "Y": [("m", infl)]}, f, infl, *g(0, 64, mw, 296), nz(), tip=tip, sort=("c", "Month", "Ascending")))
+    vis.append(v_gen(pid, "dec", "clusteredColumnChart", t, {"Category": [("c", dec)], "Y": [("m", infl)]}, f, f"{infl} by {dec.lower()}", *g(mw + gap, 64, sw, 296), nz(), tip=tip,
+                     sort=("c", dec, "Ascending")))
+    vis.append(v_gen(pid, "band", "clusteredBarChart", t, {"Category": [("c", infb)], "Y": [("m", unemp)]}, f, f"{unemp} by {infb.lower()}", *g(0, 372, sw, 336), nz(), tip=tip,
+                     sort=("c", infb, "Descending")))
+    vis.append(v_gen(pid, "pay", "lineChart", t, {"Category": [("c", "Month")], "Y": [("m", payroll)]}, f, payroll, *g(sw + gap, 372, mw, 336), nz(), tip=tip, sort=("c", "Month", "Ascending")))
+
+    pid, vis, nz = c.new_page("cycles", "Recessions, decades and the Fed")
+    vis.append(v_gen(pid, "rec", "clusteredBarChart", t, {"Category": [("c", rec)], "Y": [("m", unemp), ("m", infl), ("m", fed), ("m", y10)]}, f, f"Averages in recessions and expansions", *g(0, 64, mw, 296),
+                     nz(), tip=tip, legend=True))
+    vis.append(v_matrix(pid, t, [dec], [], [unemp, infl, fed, y10, mort], f, f"Averages by {dec.lower()}", *g(mw + gap, 64, sw, 296), nz()))
+    vis.append(v_gen(pid, "stance", "clusteredColumnChart", t, {"Category": [("c", stance)], "Y": [("m", unemp), ("m", infl)]}, f, f"{unemp} and {infl.lower()} by {stance.lower()}", *g(0, 372, sw, 336),
+                     nz(), tip=tip, legend=True, sort=("c", stance, "Ascending")))
+    vis.append(v_heat(pid, t, dec, rec, unemp, f, f"{unemp}: {dec.lower()} by phase of the cycle", *g(sw + gap, 372, mw, 336), nz()))
+
+
+def layout_catalog(c):
+    """A vehicle catalogue: dims = class, fuel type, make, transmission, drive, decade, cylinders, engine-size band; needs a Year column; measures: 1 average MPG, 2 CO2, 3 fuel cost,
+    4 EV range, 5 electric share, 6 hybrid and electric share, 7 electric models. Pages: Overview, Brands, Engines, Electric."""
+    t, f, g, tip, gap = c.table, c.fmts, c.g, c.tip, c.gap
+    cls, fuel, make, trans, drive, decade, cyl, band = (c.d(i) for i in range(8))
+    mpg, co2, cost, ev_range, ev_share, mix_share, ev_models = (c.m(i) for i in range(7))
+    rows = c.rows_name
+    mw = round(CW * 0.61)
+    sw = CW - mw - gap
+    pid, vis, nz = c.new_page("overview", c.title)
+    kpi_row(c, pid, vis, nz, [rows, mpg, co2, cost, ev_range, ev_share], spark=0)
+    vis.append(v_gen(pid, "mpg", "lineChart", t, {"Category": [("c", "Year")], "Series": [("c", cls)], "Y": [("m", mpg)]}, f, f"{mpg} by model year and {cls.lower()}", *g(0, 186, mw, 232), nz(), tip=tip,
+                     legend=True, sort=("c", "Year", "Ascending")))
+    vis.append(v_gen(pid, "fuel", "donutChart", t, {"Category": [("c", fuel)], "Y": [("m", rows)]}, f, f"{rows} by {fuel.lower()}", *g(mw + gap, 186, sw, 232), nz(), tip=tip, legend=True))
+    vis.append(v_gen(pid, "share", "hundredPercentStackedColumnChart", t, {"Category": [("c", "Year")], "Series": [("c", fuel)], "Y": [("m", rows)]}, f, f"Share of models by model year and {fuel.lower()}",
+                     *g(0, 430, mw, 278), nz(), tip=tip, legend=True, sort=("c", "Year", "Ascending")))
+    vis.append(v_gen(pid, "cls", "clusteredBarChart", t, {"Category": [("c", cls)], "Y": [("m", mpg)]}, f, f"{mpg} by {cls.lower()}", *g(mw + gap, 430, sw, 278), nz(), tip=tip,
+                     sort=("c", cls, "Descending")))
+
+    pid, vis, nz = c.new_page("brands", "Brand by brand")
+    vis.append(v_rank(pid, t, [make], [rows, mpg, co2, cost], mpg, f, f"{make}s ranked by number of models", *g(0, 64, mw, 644), nz(), rows))
+    vis.append(v_treemap(pid, t, fld_col(t, make), make, rows, f[rows], f"{rows} by {make.lower()}", *g(mw + gap, 64, sw, 296), nz(), tip=tip))
+    vis.append(v_gen(pid, "scatter", "scatterChart", t, {"Category": [("c", cls)], "X": [("m", co2)], "Y": [("m", mpg)], "Size": [("m", rows)]}, f, f"{mpg} against {co2.lower()} by {cls.lower()}",
+                     *g(mw + gap, 372, sw, 336), nz(), tip=tip))
+
+    pid, vis, nz = c.new_page("engines", "Under the bonnet")
+    vis.append(v_gen(pid, "cyl", "columnChart", t, {"Category": [("c", cyl)], "Series": [("c", fuel)], "Y": [("m", rows)]}, f, f"{rows} by {cyl.lower()} and {fuel.lower()}", *g(0, 64, mw, 296), nz(), tip=tip,
+                     legend=True, sort=("c", cyl, "Ascending")))
+    vis.append(v_gen(pid, "mpgcyl", "lineChart", t, {"Category": [("c", cyl)], "Y": [("m", mpg)]}, f, f"{mpg} by {cyl.lower()}", *g(mw + gap, 64, sw, 296), nz(), tip=tip, sort=("c", cyl, "Ascending")))
+    vis.append(v_gen(pid, "band", "scatterChart", t, {"Category": [("c", band)], "X": [("m", co2)], "Y": [("m", mpg)], "Size": [("m", rows)]}, f, f"{mpg} against {co2.lower()} by {band.lower()}",
+                     *g(0, 372, sw, 336), nz(), tip=tip))
+    vis.append(v_gen(pid, "bandcol", "clusteredColumnChart", t, {"Category": [("c", band)], "Y": [("m", mpg)]}, f, f"{mpg} by {band.lower()}", *g(sw + gap, 372, mw, 336), nz(), tip=tip,
+                     sort=("c", band, "Ascending")))
+
+    pid, vis, nz = c.new_page("electric", "The electric turn")
+    vis.append(v_gen(pid, "range", "areaChart", t, {"Category": [("c", "Year")], "Y": [("m", ev_range)]}, f, f"{ev_range} by model year", *g(0, 64, mw, 296), nz(), tip=tip, sort=("c", "Year", "Ascending")))
+    vis.append(v_gen(pid, "models", "clusteredColumnChart", t, {"Category": [("c", "Year")], "Y": [("m", ev_models)]}, f, f"{ev_models} by model year", *g(mw + gap, 64, sw, 296), nz(), tip=tip,
+                     sort=("c", "Year", "Ascending")))
+    vis.append(v_gen(pid, "gauge", "gauge", t, {"Y": [("m", ev_range)]}, f, f"{ev_range} (scale 0 to 500)", *g(0, 372, sw, 336), nz(), axis=(0, 500)))
+    vis.append(v_gen(pid, "make", "clusteredBarChart", t, {"Category": [("c", make)], "Y": [("m", ev_range)]}, f, f"{ev_range} by {make.lower()}", *g(sw + gap, 372, mw, 336), nz(), tip=tip,
+                     sort=("m", ev_range, "Descending")))
+
+
 LAYOUT_PAGES = {
     "pulse": [("overview", "Overview"), ("rhythm", "Rhythm"), ("weather", "Weather"), ("seasons", "Seasons"), ("details", "Details"), ("about", "About")],
     "flow": [("overview", "Overview"), ("patients", "Patients"), ("stay", "Stay"), ("treatment", "Treatment"), ("details", "Details"), ("about", "About")],
@@ -945,8 +1169,11 @@ LAYOUT_PAGES = {
     "board": [("overview", "Overview"), ("teams", "Teams"), ("drivers", "Drivers"), ("trend", "Trend"), ("details", "Details"), ("about", "About")],
     "story": [("overview", "Overview"), ("study", "Study"), ("home", "Home"), ("habits", "Habits"), ("details", "Details"), ("about", "About")],
     "mix": [("overview", "Overview"), ("bands", "Bands"), ("seasons", "Seasons"), ("wind", "Wind"), ("details", "Details"), ("about", "About")],
+    "atlas": [("overview", "Map"), ("states", "States"), ("strength", "Strength"), ("seasons", "Seasons"), ("paths", "Dots"), ("details", "Details"), ("about", "About")],
+    "macro": [("overview", "Overview"), ("rates", "Rates"), ("jobs", "Inflation"), ("cycles", "Cycles"), ("details", "Details"), ("about", "About")],
+    "catalog": [("overview", "Overview"), ("brands", "Brands"), ("engines", "Engines"), ("electric", "Electric"), ("details", "Details"), ("about", "About")],
 }
-LAYOUTS = {"pulse": layout_pulse, "flow": layout_flow, "lab": layout_lab, "board": layout_board, "story": layout_story, "mix": layout_mix}
+LAYOUTS = {"pulse": layout_pulse, "flow": layout_flow, "lab": layout_lab, "board": layout_board, "story": layout_story, "mix": layout_mix, "atlas": layout_atlas, "macro": layout_macro, "catalog": layout_catalog}
 
 
 def theme_json():
@@ -954,9 +1181,9 @@ def theme_json():
     return {"name": f"pbigen {STYLE_NAME}", "dataColors": STYLE["series"], "background": CARD, "foreground": INK, "tableAccent": TEAL,
             "good": TEAL, "neutral": MUTED, "bad": ACCENT, "maximum": TEAL, "center": MUTED, "minimum": ACCENT,
             "textClasses": {"callout": {"fontSize": 26, "fontFace": STYLE["font"] if STYLE["font"] != "Segoe UI" else "Segoe UI Semibold", "color": call},
-                            "title": {"fontSize": 12, "fontFace": "Segoe UI Semibold", "color": INK},
-                            "header": {"fontSize": 12, "fontFace": "Segoe UI Semibold", "color": INK},
-                            "label": {"fontSize": 10, "fontFace": "Segoe UI", "color": MUTED}},
+                            "title": {"fontSize": 12, "fontFace": STYLE["font"] if STYLE["font"] != "Segoe UI" else "Segoe UI Semibold", "color": INK},
+                            "header": {"fontSize": 12, "fontFace": STYLE["font"] if STYLE["font"] != "Segoe UI" else "Segoe UI Semibold", "color": INK},
+                            "label": {"fontSize": 10, "fontFace": STYLE["font"], "color": MUTED}},
             "visualStyles": {"page": {"*": {"background": [{"color": {"solid": {"color": BG}}, "transparency": 0}],
                                             "outspace": [{"color": {"solid": {"color": NAVY if STYLE["dark"] else "#E5E7EB"}}, "transparency": 0}]}}}}
 
@@ -982,7 +1209,7 @@ def build_report(table, title, date, dims, metrics, measures, cols, about=None, 
     labels = {"overview": "Overview", "breakdown": "Breakdown", "compare": "Compare", "trends": "Trends", "matrix": "Matrix", "details": "Details", "about": "About"}
     if layout != "classic":
         keys, labels = [k for k, _ in LAYOUT_PAGES[layout]], dict(LAYOUT_PAGES[layout])
-        if layout in ("pulse", "mix") and not date:
+        if layout in ("pulse", "mix", "macro") and not date:
             sys.exit(f"the {layout} layout needs a date column")
     pid_of = {k: oid("page", k) for k in keys}
     tip_pid = oid("page", "tooltip")
@@ -1034,6 +1261,24 @@ def build_report(table, title, date, dims, metrics, measures, cols, about=None, 
                 active = k == key
                 vis += v_button(pid, f"nav-{k}", 16 + i * (bw + 8), 684, bw, 28, 10 + 2 * i, labels[k], ("page", pid_of[k]),
                                 fill=TEAL if active else CARD, text_color=STYLE["nav_active_text"] if active else STYLE["nav_text"], bold=active, size=10)
+        elif STYLE["nav"] == "rail":            # a slim numbered rail, the report title and the page heading above the content
+            vis = [v_shape(pid, "nav-bg", 0, 0, NAV_W, 720, 1, NAVY)]
+            for i, k in enumerate(keys):
+                active = k == key
+                vis += v_button(pid, f"nav-{k}", 8, 20 + i * 48, NAV_W - 16, 38, 10 + 2 * i, f"{i + 1}  {labels[k]}", ("page", pid_of[k]),
+                                fill=TEAL if active else None, text_color=STYLE["nav_active_text"] if active else STYLE["nav_text"], bold=active, size=10)
+            vis.append(v_textbox(pid, "nav-title", CX, 6, CW, 24, 2, [(title, {"fontSize": "10pt", "color": MUTED})]))
+            vis.append(v_textbox(pid, "title", CX, 26, CW, 42, nz() + 100, [(heading, {"fontSize": "20pt", "fontWeight": "bold", "color": INK})]))
+        elif STYLE["nav"] == "dock":            # a big italic title on top and a floating dock with the pages at the bottom
+            bw = 104
+            total = len(keys) * (bw + 6) - 6
+            x0 = (1280 - total) / 2
+            vis = [v_textbox(pid, "nav-title", 16, 6, 1100, 48, 2, [(title if key == "overview" else heading, {"fontSize": "22pt", "fontWeight": "bold", "fontStyle": "italic", "color": TEAL})]),
+                   v_shape(pid, "nav-dock", x0 - 14, 672, total + 28, 40, 1, NAVY, radius=20)]
+            for i, k in enumerate(keys):
+                active = k == key
+                vis += v_button(pid, f"nav-{k}", x0 + i * (bw + 6), 676, bw, 32, 10 + 2 * i, labels[k], ("page", pid_of[k]),
+                                fill=TEAL if active else None, text_color=STYLE["nav_active_text"] if active else STYLE["nav_text"], bold=active, size=10)
         elif STYLE["nav"] == "split":           # a left panel with the filters, the page tabs across the top of the content
             vis = [v_shape(pid, "nav-bg", 0, 0, NAV_W, 720, 1, NAVY),
                    v_textbox(pid, "nav-title", 14, 14, NAV_W - 24, 64, 2, [(title, {"fontSize": "13pt", "fontWeight": "bold", "color": "#FFFFFF"})])]
@@ -1047,6 +1292,14 @@ def build_report(table, title, date, dims, metrics, measures, cols, about=None, 
                 active = k == key
                 vis += v_button(pid, f"nav-{k}", CX + i * (bw + 6), 10, bw, 30, 10 + 2 * i, labels[k], ("page", pid_of[k]),
                                 fill=TEAL if active else CARD, text_color=STYLE["nav_active_text"] if active else STYLE["nav_text"], bold=active, size=10)
+        elif STYLE["header"] == "terminal":     # a thin black bar with an amber title and function-key tabs
+            vis = [v_shape(pid, "nav-bg", 0, 0, 1280, 28, 1, NAVY), v_shape(pid, "nav-rule", 0, 28, 1280, 2, 3, TEAL),
+                   v_textbox(pid, "nav-title", 8, 3, 620, 22, 2, [(title.upper(), {"fontSize": "10pt", "fontWeight": "bold", "color": TEAL})])]
+            bw = 108
+            for i, k in enumerate(keys):
+                active = k == key
+                vis += v_button(pid, f"nav-{k}", 1280 - 8 - (len(keys) - i) * (bw + 4) + 4, 3, bw, 22, 10 + 2 * i, f"F{i + 1} {labels[k].upper()}", ("page", pid_of[k]),
+                                fill=TEAL if active else None, text_color=STYLE["nav_active_text"] if active else STYLE["nav_text"], bold=active, size=8)
         elif STYLE["header"] == "card":         # a floating header card with the title and round pills
             vis = [v_shape(pid, "nav-bg", 16, 10, 1248, 54, 1, CARD, border=True, radius=14),
                    v_textbox(pid, "nav-title", 30, 18, 520, 40, 2, [(title, {"fontSize": "15pt", "fontWeight": "bold", "color": INK})])]
@@ -1291,14 +1544,16 @@ def main():
     ap.add_argument("--metrics", help="comma-separated numeric columns to build measures for")
     ap.add_argument("--dims", help="comma-separated categorical columns to use as slicers and chart axes")
     ap.add_argument("--culture", default="en-US")
+    ap.add_argument("--geo", help='geographic columns for map visuals, "Column=Category,...": for example "State=StateOrProvince,Lat=Latitude,Lon=Longitude"')
     ap.add_argument("--rows-name", default="Rows", help="name of the row-count measure, for example Patients or Wines")
     ap.add_argument("--style", choices=sorted(STYLES), default="clean",
-                    help="look of the report: clean (light, left menu), midnight (dark blue, filters in the header), sunset (brown and orange, tabs on top), "
+                    help="look of the report: storm (slate with a numbered rail), terminal (amber on black), garage (cream with a bottom dock),  clean (light, left menu), midnight (dark blue, filters in the header), sunset (brown and orange, tabs on top), "
                          "violet (purple, left menu), neon (black with cyan, tabs at the bottom), paper (cream, serif headline), bordeaux (burgundy rail on the right)")
-    ap.add_argument("--layout", choices=["classic", "pulse", "flow", "lab", "board", "story", "mix"], default="classic",
+    ap.add_argument("--layout", choices=["classic", "pulse", "flow", "lab", "board", "story", "mix", "atlas", "macro", "catalog"], default="classic",
                     help="which pages and charts: classic (bars, donut, scatter, matrices), pulse (time series: combo, heat map, stacked area, gauge), "
                          "flow (categories: funnel, ribbon, waterfall, 100%% stacked), lab (numeric columns: gauge, small multiples, scatter by group), "
-                         "board (a ranked table with data bars, actual against target), story (insight cards beside the charts), mix (stacked columns and bars, air-quality bands)")
+                         "board (a ranked table with data bars, actual against target), story (insight cards beside the charts), mix (stacked columns and bars, air-quality bands), "
+                         "atlas (a tile-grid map and a dot map with a ranking), macro (latest values and changes, rates, cycles), catalog (a vehicle catalogue: brands, engines, electric)")
     ap.add_argument("--insight", action="append", help='for the story layout: an insight card as "BIG NUMBER|sentence", repeatable (six are used)')
     ap.add_argument("--measure", action="append", help='custom DAX measure "Name=DAX|format" ({T} = table name); custom measures are used first in cards and charts')
     ap.add_argument("--only-custom", action="store_true", help="build only the Rows measure and the --measure ones (no automatic Total/Average measures)")
@@ -1323,6 +1578,9 @@ def main():
         metrics = []
     custom = parse_custom_measures(args.measure, table)
     measures = build_measures(table, args.rows_name, metrics, custom)
+    clash = sorted({m[0] for m in measures} & {c["name"] for c in cols} | ({"Month", "Year"} & {m[0] for m in measures} if date else set()))
+    if clash:
+        sys.exit(f"measure name(s) {', '.join(clash)} are also column names; a column and a measure cannot share a name in one table. Rename the measure.")
     if args.embed:
         if src["kind"] != "csv":
             sys.exit("--embed works with CSV input only")
@@ -1347,7 +1605,7 @@ def main():
                "model Model\n\tculture: en-US\n\tdefaultPowerBIDataSourceVersion: powerBI_V3\n\tdiscourageImplicitMeasures\n\tsourceQueryCulture: en-US\n\n"
                f"ref table {tq(table)}\n")
     m = m_query(src, table, cols, date, data_path)
-    write_text(sm / "definition" / "tables" / f"{table}.tmdl", tmdl_table(table, cols, date, measures, m))
+    write_text(sm / "definition" / "tables" / f"{table}.tmdl", tmdl_table(table, cols, date, measures, m, dict(x.split("=", 1) for x in args.geo.split(",")) if args.geo else None))
 
     write_json(rp / "definition.pbir", {"$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definitionProperties/2.0.0/schema.json",
                                         "version": "4.0", "datasetReference": {"byPath": {"path": f"../{name}.SemanticModel"}}})
