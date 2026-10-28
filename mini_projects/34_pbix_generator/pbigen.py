@@ -212,7 +212,8 @@ def m_query(src, table, cols, date_col, path):
     steps, last = [], "Source"
     if src.get("embedded"):
         chunks = [src["embedded"][i:i + 3000] for i in range(0, len(src["embedded"]), 3000)]
-        literal_text = ' &\n\t\t\t\t\t'.join(m_str(c) for c in chunks)
+        # a flat list, not a chain of "&": a long chain nests one level per piece and the M engine stops with "Depth limit exceeded" on large tables
+        literal_text = 'Text.Combine({\n\t\t\t\t\t' + ',\n\t\t\t\t\t'.join(m_str(c) for c in chunks) + '})' if len(chunks) > 1 else m_str(chunks[0])
         steps.append(f'Source = Csv.Document(Binary.Decompress(Binary.FromText({literal_text}, BinaryEncoding.Base64), Compression.GZip), '
                      f'[Delimiter=",", Columns={len(cols)}, Encoding=65001, QuoteStyle=QuoteStyle.Csv])')
     elif src["kind"] == "excel":
@@ -419,6 +420,21 @@ STYLES = {
                  EDGE="#D9D7CF", nav_text="#BDBDBD", nav_active_text="#FFFFFF", radius=4, border=1, dark=False, title_card=False, top_slicers=False,
                  callout="INK", heat=("#FFFFFF", "#9ED8EE", "#00A1DE"), donut_bottom=True,
                  series=["#C60C30", "#00A1DE", "#009B3A", "#F9461C", "#522398", "#62361B", "#E27EA6", "#F9E300"]),
+    # an atlas: pale blue-grey page, UN blue and navy, a title with the pages as filled folder tabs hanging on a thick blue rule (a world report)
+    "atlas": dict(nav="top", header="ledger", top=88, NAVY="#1B365D", TEAL="#009EDB", ACCENT="#E8743B", INK="#1B2B41", MUTED="#6B7A90", BG="#F3F6FA", CARD="#FFFFFF",
+                  EDGE="#D7E0EA", nav_text="#33506F", nav_active_text="#FFFFFF", radius=6, border=1, dark=False, title_card=False, top_slicers=False,
+                  callout="INK", heat=("#EAF6FC", "#8FD0EE", "#3FA3D0"), heat_text="ink", donut_bottom=True,
+                  series=["#009EDB", "#1B365D", "#F2A541", "#E8743B", "#5BB58F", "#7B6DB5", "#9AA5B1", "#D9534F"]),
+    # a seaside holiday: sand page, a deep teal filter panel on the left with the lists, coral tabs on top and turquoise (a tourism report)
+    "riviera": dict(nav="split", nav_w=200, top=54, NAVY="#0E5A6B", TEAL="#F26B5B", ACCENT="#0E8FA3", INK="#1F3A44", MUTED="#6D8A93", BG="#FBF5E9", CARD="#FFFFFF",
+                    EDGE="#EADFC9", nav_text="#0E5A6B", nav_active_text="#FFFFFF", radius=14, border=1, dark=False, title_card=False, top_slicers=False, panel_dark=True,
+                    callout="TEAL", heat=("#FFF7E6", "#F9C98A", "#F26B5B"), heat_text="ink", donut_bottom=True,
+                    series=["#0E8FA3", "#F26B5B", "#F2C14E", "#7FC8A9", "#0E5A6B", "#E39A8C", "#B5A272", "#5C7AEA"]),
+    # toy bricks: a yellow bar with a row of studs, red and blue and black, thin black card borders (a set catalogue)
+    "brick": dict(nav="top", header="studs", top=72, NAVY="#FFD500", TEAL="#D01012", ACCENT="#0055BF", INK="#1B2A34", MUTED="#5F6B73", BG="#F4F4F2", CARD="#FFFFFF",
+                  EDGE="#1B2A34", nav_text="#1B2A34", nav_active_text="#FFFFFF", radius=4, border=1, dark=False, title_card=False, top_slicers=False,
+                  callout="INK", heat=("#FFFFFF", "#FFE680", "#F58A7C"), heat_text="ink", donut_bottom=True,
+                  series=["#D01012", "#0055BF", "#F2C300", "#237841", "#FE8A18", "#1B2A34", "#9BA19D", "#9B1A8E"]),
     # warm white with a burgundy rail on the right-hand side
     "bordeaux": dict(nav="right", nav_w=180, NAVY="#4A1424", TEAL="#8C2740", ACCENT="#C9A227", INK="#2B1A1F", MUTED="#7A6168", BG="#F6F1EE", CARD="#FFFFFF",
                      EDGE="#E6D9D4", nav_text="#E8CDD3", nav_active_text="#4A1424", radius=10, border=1, dark=False, title_card=False, top_slicers=False,
@@ -606,14 +622,14 @@ def v_slicer(page, table, col, label, x, y, w, h, z, dropdown=True, hidden=False
     objects = {"header": [{"properties": {"show": flag(False)}}]}
     if dropdown:
         objects["data"] = [{"properties": {"mode": tx("Dropdown")}}]
-    if not dropdown and STYLE["dark"]:
-        objects["items"] = [{"properties": {"fontColor": solid(INK)}}]
+    if not dropdown and (STYLE["dark"] or STYLE.get("panel_dark")):
+        objects["items"] = [{"properties": {"fontColor": solid("#FFFFFF" if STYLE.get("panel_dark") else INK)}}]
     if boxed:     # a dropdown in a filled box (dark styles)
         objects["items"] = [{"properties": {"fontColor": solid(INK), "background": solid(CARD), "outline": solid(EDGE)}}]
     v = {"visualType": "slicer",
          "query": {"queryState": {"Values": {"projections": [proj(fld_col(table, col), table, col, active=True)]}}},
          "objects": objects,
-         "visualContainerObjects": {"title": [{"properties": {"show": flag(True), "text": tx(label), "fontColor": solid(MUTED), "fontSize": num(10)}}],
+         "visualContainerObjects": {"title": [{"properties": {"show": flag(True), "text": tx(label), "fontColor": solid("#CFE6EA" if (STYLE.get("panel_dark") and not dropdown) else MUTED), "fontSize": num(10)}}],
                                     "background": [{"properties": {"show": flag(boxed), "color": solid(CARD), "transparency": num(0)}}],
                                     "border": [{"properties": {"show": flag(boxed), "color": solid(EDGE), "radius": num(STYLE["radius"] // 2), "width": num(1)}}]},
          "syncGroup": {"groupName": col, "fieldChanges": True, "filterChanges": True},
@@ -634,13 +650,15 @@ def v_chart(page, kind, table, cat_field, cat_name, measure, fmt, title, x, y, w
     return container(page, f"{kind}-{cat_name}-{measure}", x, y, w, h, z, v)
 
 
-def v_treemap(page, table, cat_field, cat_name, measure, fmt, title, x, y, w, h, z, tip=None):
+def v_treemap(page, table, cat_field, cat_name, measure, fmt, title, x, y, w, h, z, tip=None, units=None):
     vco = card_objects(title)
     vco.update(tooltip_obj(tip))
     v = {"visualType": "treemap",
          "query": {"queryState": {"Group": {"projections": [proj(cat_field, table, cat_name, active=True)]},
                                   "Values": {"projections": [proj(fld_meas(table, measure), table, measure, fmt)]}}},
          "objects": chart_objects("treemap"), "visualContainerObjects": vco, "drillFilterOtherVisuals": True}
+    if units:                                      # labels in full (1,234 and not 1 tys.)
+        v["objects"].setdefault("labels", [{"properties": {}}])[0]["properties"]["labelDisplayUnits"] = num(units)
     return container(page, f"treemap-{cat_name}-{measure}", x, y, w, h, z, v)
 
 
@@ -1893,6 +1911,145 @@ def layout_transit(c):
     vis.append(v_gen(pid, "wk", "clusteredBarChart", t, {"Category": [("c", line)], "Y": [("m", wkshare)]}, f, f"{wkshare} by {lab(line)}", *g(mw + gap, 64, sw, 330), nz(), tip=tip, sort=("m", wkshare, "Descending"), colors=colours))
 
 
+def layout_world(c):
+    """The world's demography (one row a country and a year, 1950-2100): dims = region, subregion, period (estimate or projection), decade, fertility band, life expectancy band, median age band,
+    population size band, country; needs a date (so Year and Month), columns Country, Year, Population_thousands and the UN's own World_, Region_ and Subregion_ columns for fertility, life expectancy,
+    median age and infant mortality; measures: 1 population (millions), 2 population 2023, 3 population 2100, 4 change 2023 to 2100, 5 world fertility, 6 world life expectancy, 7 world median age,
+    8 region fertility, 9 region life expectancy, 10 region median age, 11 subregion median age, 12 country fertility, 13 country life expectancy, 14 births, 15 deaths, 16 world infant mortality,
+    17 region infant mortality, 18 countries, 19 life expectancy 2023, 20 fertility 2023, 21 median age 2023, 22 median age 2100. Pages: World, Countries, Ageing, Growth, Lives."""
+    t, f, g, tip, gap = c.table, c.fmts, c.g, c.tip, c.gap
+    region, sub, period, decade, fband, lband, aband, sband, country = (c.d(i) for i in range(9))
+    (pop, pop23, pop100, change, wfert, wlife, wage, rfert, rlife, rage, srage, cfert, clife, births, deaths, wimr, rimr, countries, life23, fert23, age23, age100) = (c.m(i) for i in range(22))
+    mw = round(CW * 0.61)
+    sw = CW - mw - gap
+    half = round((CW - gap) / 2)
+    third = round((CW - 2 * gap) / 3)
+    wyear = {"categoryAxis": {"axisType": tx("Scalar"), "start": num(1950), "end": num(2100)}}      # one continuous axis for 151 years
+    wpop = {**wyear, "valueAxis": {"labelDisplayUnits": num(1)}}
+    pid, vis, nz = c.new_page("overview", c.title)
+    kpi_row(c, pid, vis, nz, [pop23, pop100, life23, fert23, age23], h=100, spark=0, plain=[pop23, pop100])
+    vis.append(v_gen(pid, "area", "stackedAreaChart", t, {"Category": [("c", "Year")], "Series": [("c", region)], "Y": [("m", pop)]}, f, f"{pop} by year and {lab(region)} (the UN's medium projection from 2024)", *g(0, 176, mw, 262),
+                     nz(), tip=tip, legend=True, sort=("c", "Year", "Ascending"), extra=wpop))
+    vis.append(v_gen(pid, "regions", "clusteredBarChart", t, {"Category": [("c", region)], "Y": [("m", pop23), ("m", pop100)]}, f, f"{pop23} and {lab(pop100)} by {lab(region)}", *g(mw + gap, 176, sw, 262), nz(), tip=tip,
+                     legend=True, sort=("m", pop23, "Descending"), units=1))
+    vis.append(v_gen(pid, "fert", "lineChart", t, {"Category": [("c", "Year")], "Series": [("c", region)], "Y": [("m", rfert)]}, f, f"{rfert} by year", *g(0, 450, mw, 258), nz(), tip=tip, legend=True, sort=("c", "Year", "Ascending"), extra=wyear))
+    vis.append(v_gen(pid, "life", "lineChart", t, {"Category": [("c", "Year")], "Series": [("c", region)], "Y": [("m", rlife)]}, f, f"{rlife} by year", *g(mw + gap, 450, sw, 258), nz(), tip=tip, legend=True, sort=("c", "Year", "Ascending"), extra=wyear))
+
+    pid, vis, nz = c.new_page("countries", "Every country, year by year")
+    vis.append(v_gen(pid, "bubbles", "scatterChart", t, {"Category": [("c", country)], "X": [("m", clife)], "Y": [("m", cfert)], "Size": [("m", pop)], "Series": [("c", region)], "Play": [("c", "Year")]}, f,
+                     f"{cfert} against {lab(clife)}, a bubble a country (press play to move through the years)", *g(0, 64, CW, 644), nz(), tip=tip, legend=True, no_labels=True, ranges=((25, 90), (0, 8.5))))
+
+    pid, vis, nz = c.new_page("ageing", "A younger world and an older one")
+    vis.append(v_heat(pid, t, sub, decade, srage, f, f"{srage}: {lab(sub)} by {lab(decade)} (the stronger the colour, the older)", *g(0, 64, mw, 330), nz(), size=10, totals=False))
+    vis.append(v_gen(pid, "age", "lineChart", t, {"Category": [("c", "Year")], "Series": [("c", region)], "Y": [("m", rage)]}, f, f"{rage} by year", *g(mw + gap, 64, sw, 330), nz(), tip=tip, legend=True, sort=("c", "Year", "Ascending"), extra=wyear))
+    vis.append(v_gen(pid, "bands", "hundredPercentStackedColumnChart", t, {"Category": [("c", decade)], "Series": [("c", aband)], "Y": [("m", countries)]}, f, f"Share of countries by {lab(aband)} and {lab(decade)}",
+                     *g(0, 406, mw, 302), nz(), tip=tip, legend=True, sort=("c", decade, "Ascending")))
+    vis.append(v_gen(pid, "world", "lineChart", t, {"Category": [("c", "Year")], "Y": [("m", wage)]}, f, f"{wage} of the world by year", *g(mw + gap, 406, sw, 302), nz(), tip=tip, sort=("c", "Year", "Ascending"), extra=wyear))
+
+    pid, vis, nz = c.new_page("growth", "Who grows and who shrinks by 2100")
+    vis.append(v_rank(pid, t, [country, region], [pop23, pop100, change], change, f, "The countries that grow most between 2023 and 2100", *g(0, 64, half, 644), nz(), change, size=11, first_width=150))
+    vis.append(v_rank(pid, t, [country, region], [pop23, pop100, change], change, f, "The countries that shrink most between 2023 and 2100", *g(half + gap, 64, half, 644), nz(), change, size=11, first_width=150,
+                      direction="Ascending"))
+
+    pid, vis, nz = c.new_page("lives", "Longer lives, fewer children")
+    vis.append(v_gen(pid, "imr", "lineChart", t, {"Category": [("c", "Year")], "Series": [("c", region)], "Y": [("m", rimr)]}, f, f"{rimr} by year", *g(0, 64, mw, 330), nz(), tip=tip, legend=True, sort=("c", "Year", "Ascending"), extra=wyear))
+    vis.append(v_gen(pid, "life", "donutChart", t, {"Category": [("c", lband)], "Y": [("m", countries)]}, f, f"{countries} by {lab(lband)}, 2023", *g(mw + gap, 64, sw, 330), nz(), tip=tip, legend=True,
+                     vfilter=("Year", [2023])))
+    vis.append(v_gen(pid, "f23", "donutChart", t, {"Category": [("c", fband)], "Y": [("m", countries)]}, f, f"{countries} by {lab(fband)}, 2023", *g(0, 406, third, 302), nz(), tip=tip, legend=True, vfilter=("Year", [2023])))
+    vis.append(v_gen(pid, "f2100", "donutChart", t, {"Category": [("c", fband)], "Y": [("m", countries)]}, f, f"{countries} by {lab(fband)}, 2100", *g(third + gap, 406, third, 302), nz(), tip=tip, legend=True,
+                     vfilter=("Year", [2100])))
+    vis.append(v_gen(pid, "l2100", "donutChart", t, {"Category": [("c", lband)], "Y": [("m", countries)]}, f, f"{countries} by {lab(lband)}, 2100", *g(2 * (third + gap), 406, third, 302), nz(), tip=tip, legend=True,
+                     vfilter=("Year", [2100])))
+
+
+def layout_holiday(c):
+    """Tourism (one row a country, month, type of guest and accommodation): dims = country, guests, accommodation, region group, season, calendar month, era; needs a date (so Month and Year) and columns
+    Nights, Nights_comparable, Nights_2019_same_month, Country_code; measures: 1 nights a year (millions), 2 foreign share, 3 summer share, 4 share of the 2019 level, 5 countries, 6 domestic nights,
+    7 foreign nights, 8 hotels share, 9 share of the year's nights. Pages: Overview, Seasons, COVID, Mix, Countries."""
+    t, f, g, tip, gap = c.table, c.fmts, c.g, c.tip, c.gap
+    country, guests, accom, rgroup, season, mon, era = (c.d(i) for i in range(7))
+    nights, foreign, summer, share19, countries, dom_n, for_n, hotels, yshare = (c.m(i) for i in range(9))
+    mw = round(CW * 0.61)
+    sw = CW - mw - gap
+    recovery = ["3 2022 onwards"]
+    pid, vis, nz = c.new_page("overview", c.title)
+    kpi_row(c, pid, vis, nz, [nights, foreign, summer, share19], h=100, spark=4, plain=[nights])
+    vis.append(v_gen(pid, "month", "lineChart", t, {"Category": [("c", "Month")], "Y": [("m", nights)]}, f, f"{nights}, month by month", *g(0, 176, mw, 262), nz(), tip=tip, sort=("c", "Month", "Ascending")))
+    vis.append(v_gen(pid, "accom", "donutChart", t, {"Category": [("c", accom)], "Y": [("m", nights)]}, f, f"{nights} by {lab(accom)}", *g(mw + gap, 176, sw, 262), nz(), tip=tip, legend=True, units=1))
+    vis.append(v_gen(pid, "year", "columnChart", t, {"Category": [("c", "Year")], "Series": [("c", guests)], "Y": [("m", nights)]}, f, f"{nights} by year and {lab(guests)}", *g(0, 450, mw, 258), nz(), tip=tip,
+                     legend=True, sort=("c", "Year", "Ascending"), units=1))
+    vis.append(v_gen(pid, "country", "clusteredBarChart", t, {"Category": [("c", country)], "Y": [("m", nights)]}, f, f"{nights} by {lab(country)}", *g(mw + gap, 450, sw, 258), nz(), tip=tip, sort=("m", nights, "Descending")))
+
+    pid, vis, nz = c.new_page("seasons", "When Europe goes on holiday")
+    vis.append(v_heat(pid, t, country, mon, yshare, f, f"{yshare}: {lab(country)} by month (the stronger the colour, the busier)", *g(0, 64, mw, 644), nz(), size=9, totals=False))
+    vis.append(v_gen(pid, "regions", "lineChart", t, {"Category": [("c", mon)], "Series": [("c", rgroup)], "Y": [("m", yshare)]}, f, f"{yshare} by month and {lab(rgroup)}", *g(mw + gap, 64, sw, 330), nz(), tip=tip,
+                     legend=True, sort=("c", mon, "Ascending")))
+    vis.append(v_gen(pid, "summer", "clusteredBarChart", t, {"Category": [("c", country)], "Y": [("m", summer)]}, f, f"{summer} by {lab(country)}", *g(mw + gap, 406, sw, 302), nz(), tip=tip,
+                     sort=("m", summer, "Descending")))
+
+    pid, vis, nz = c.new_page("covid", "The year the hotels emptied")
+    vis.append(v_gen(pid, "rec", "lineChart", t, {"Category": [("c", "Month")], "Y": [("m", share19)]}, f, f"{share19} by month (every month against the same month of 2019)", *g(0, 64, mw, 330), nz(), tip=tip,
+                     sort=("c", "Month", "Ascending")))
+    vis.append(v_gen(pid, "c2020", "clusteredBarChart", t, {"Category": [("c", country)], "Y": [("m", share19)]}, f, f"{share19} by {lab(country)}, 2020 and 2021", *g(mw + gap, 64, sw, 330), nz(), tip=tip,
+                     sort=("m", share19, "Ascending"), vfilter=(era, ["2 2020 to 2021 (COVID)"])))
+    vis.append(v_gen(pid, "year", "clusteredColumnChart", t, {"Category": [("c", "Year")], "Y": [("m", nights)]}, f, f"{nights} by year", *g(0, 406, mw, 302), nz(), tip=tip, sort=("c", "Year", "Ascending"), units=1))
+    vis.append(v_rank(pid, t, [country, rgroup], [nights, share19], share19, f, "Back to 2019? 2022 onwards", *g(mw + gap, 406, sw, 302), nz(), nights, vfilter=(era, recovery), size=11, first_width=130))
+
+    pid, vis, nz = c.new_page("mix", "Home or away, hotel or tent")
+    vis.append(v_gen(pid, "guests", "hundredPercentStackedBarChart", t, {"Category": [("c", country)], "Series": [("c", guests)], "Y": [("m", nights)]}, f, f"Share of {nights.lower()} by {lab(guests)} in each {lab(country)}",
+                     *g(0, 64, mw, 644), nz(), tip=tip, legend=True, sort=("c", country, "Ascending")))
+    vis.append(v_gen(pid, "accom", "hundredPercentStackedColumnChart", t, {"Category": [("c", rgroup)], "Series": [("c", accom)], "Y": [("m", nights)]}, f, f"Share of {nights.lower()} by {lab(accom)} and {lab(rgroup)}",
+                     *g(mw + gap, 64, sw, 330), nz(), tip=tip, legend=True, sort=("c", rgroup, "Ascending")))
+    vis.append(v_gen(pid, "foreign", "clusteredBarChart", t, {"Category": [("c", rgroup)], "Y": [("m", foreign)]}, f, f"{foreign} by {lab(rgroup)}", *g(mw + gap, 406, sw, 302), nz(), tip=tip,
+                     sort=("m", foreign, "Descending")))
+
+    pid, vis, nz = c.new_page("countries", "Country by country")
+    vis.append(v_rank(pid, t, [country, rgroup], [nights, foreign, summer, share19], nights, f, "Countries compared", *g(0, 64, mw, 644), nz(), nights, size=11, first_width=150))
+    vis.append(v_gen(pid, "scatter", "scatterChart", t, {"Category": [("c", country)], "X": [("m", foreign)], "Y": [("m", summer)], "Size": [("m", nights)], "Series": [("c", rgroup)]}, f,
+                     f"{summer} against {lab(foreign)}, a dot a country", *g(mw + gap, 64, sw, 330), nz(), tip=tip, legend=True, no_labels=True))
+    vis.append(v_gen(pid, "hotels", "clusteredBarChart", t, {"Category": [("c", country)], "Y": [("m", hotels)]}, f, f"{hotels} by {lab(country)}", *g(mw + gap, 406, sw, 302), nz(), tip=tip,
+                     sort=("m", hotels, "Descending")))
+
+
+def layout_bricks(c):
+    """A set catalogue (one row a set): dims = root theme, decade, size band, theme; needs columns Year and Parts (blank when the set has no parts), Set_name; measures: 1 total parts (millions),
+    2 average parts, 3 median parts, 4 largest set, 5 themes, 6 sets of 1,000 parts or more, 7 share of 1,000-part sets, 8 sets with parts, 9 first year. Pages: Bricks, Themes, Growth, Giants."""
+    t, f, g, tip, gap = c.table, c.fmts, c.g, c.tip, c.gap
+    root, decade, sband, theme = (c.d(i) for i in range(4))
+    total, avg, med, largest, themes, big, bigshare, with_parts, first = (c.m(i) for i in range(9))
+    sets = c.rows_name
+    byear = {"categoryAxis": {"axisType": tx("Scalar"), "start": num(1958), "end": num(2025)}}
+    mw = round(CW * 0.61)
+    sw = CW - mw - gap
+    pid, vis, nz = c.new_page("overview", c.title)
+    kpi_row(c, pid, vis, nz, [sets, total, avg, largest, themes], h=100, spark=0, plain=[sets, largest])
+    vis.append(v_gen(pid, "years", "columnChart", t, {"Category": [("c", "Year")], "Y": [("m", sets)]}, f, f"{sets} by year of release", *g(0, 176, mw, 262), nz(), tip=tip, sort=("c", "Year", "Ascending"), units=1,
+                     vfilter=("Year", list(range(1958, 2026))), extra=byear))
+    vis.append(v_gen(pid, "avg", "lineChart", t, {"Category": [("c", "Year")], "Y": [("m", avg)]}, f, f"{avg} by year of release", *g(mw + gap, 176, sw, 262), nz(), tip=tip, sort=("c", "Year", "Ascending"),
+                     vfilter=("Year", list(range(1958, 2026))), extra=byear))
+    vis.append(v_treemap(pid, t, fld_col(t, root), root, sets, f[sets], f"{sets} by {lab(root)}", *g(0, 450, mw, 258), nz(), tip=tip, units=1))
+    vis.append(v_gen(pid, "size", "donutChart", t, {"Category": [("c", sband)], "Y": [("m", sets)]}, f, f"{sets} by {lab(sband)}", *g(mw + gap, 450, sw, 258), nz(), tip=tip, legend=True, units=1))
+
+    pid, vis, nz = c.new_page("themes", "Themes, big and small")
+    vis.append(v_gen(pid, "bar", "clusteredBarChart", t, {"Category": [("c", root)], "Y": [("m", sets)]}, f, f"{sets} by {lab(root)}", *g(0, 64, sw, 644), nz(), tip=tip, sort=("m", sets, "Descending"), units=1))
+    vis.append(v_gen(pid, "scatter", "scatterChart", t, {"Category": [("c", root)], "X": [("m", sets)], "Y": [("m", avg)], "Size": [("m", total)]}, f, f"{avg} against the number of {sets.lower()}, a dot a {lab(root)}",
+                     *g(sw + gap, 64, mw, 330), nz(), tip=tip, no_labels=True,
+                     extra={"categoryAxis": {"labelDisplayUnits": num(1)}, "valueAxis": {"labelDisplayUnits": num(1)}}))
+    vis.append(v_rank(pid, t, [root], [sets, avg, total], total, f, "Themes by total parts", *g(sw + gap, 406, mw, 302), nz(), total, size=11, first_width=170))
+
+    pid, vis, nz = c.new_page("growth", "Sets get bigger")
+    vis.append(v_gen(pid, "decade", "hundredPercentStackedColumnChart", t, {"Category": [("c", decade)], "Series": [("c", sband)], "Y": [("m", sets)]}, f, f"Share of {sets.lower()} by {lab(sband)} and {lab(decade)}",
+                     *g(0, 64, mw, 330), nz(), tip=tip, legend=True, sort=("c", decade, "Ascending")))
+    vis.append(v_gen(pid, "median", "lineChart", t, {"Category": [("c", decade)], "Y": [("m", med)]}, f, f"{med} by {lab(decade)}", *g(mw + gap, 64, sw, 330), nz(), tip=tip, sort=("c", decade, "Ascending")))
+    vis.append(v_gen(pid, "stack", "columnChart", t, {"Category": [("c", "Year")], "Series": [("c", sband)], "Y": [("m", sets)]}, f, f"{sets} by year and {lab(sband)}", *g(0, 406, CW, 302), nz(), tip=tip, legend=True,
+                     sort=("c", "Year", "Ascending"), vfilter=("Year", list(range(1958, 2026))), extra=byear))
+
+    pid, vis, nz = c.new_page("giants", "The biggest sets")
+    vis.append(v_rank(pid, t, ["Set_name", root], [largest, first], largest, f, "The sets with the most parts", *g(0, 64, mw, 644), nz(), largest, size=11, first_width=240))
+    vis.append(v_gen(pid, "largest", "clusteredColumnChart", t, {"Category": [("c", decade)], "Y": [("m", largest)]}, f, f"{largest} by {lab(decade)}", *g(mw + gap, 64, sw, 330), nz(), tip=tip, sort=("c", decade, "Ascending"), units=1))
+    vis.append(v_gen(pid, "big", "clusteredColumnChart", t, {"Category": [("c", decade)], "Y": [("m", big)]}, f, f"{big} by {lab(decade)}", *g(mw + gap, 406, sw, 302), nz(), tip=tip, sort=("c", decade, "Ascending")))
+
+
 LAYOUT_PAGES = {
     "pulse": [("overview", "Overview"), ("rhythm", "Rhythm"), ("weather", "Weather"), ("seasons", "Seasons"), ("details", "Details"), ("about", "About")],
     "flow": [("overview", "Overview"), ("patients", "Patients"), ("stay", "Stay"), ("treatment", "Treatment"), ("details", "Details"), ("about", "About")],
@@ -1914,11 +2071,15 @@ LAYOUT_PAGES = {
     "nutri": [("overview", "Overview"), ("macros", "Macros"), ("foods", "Rankings"), ("minerals", "Minerals"), ("bands", "Bands"), ("details", "Details"), ("about", "About")],
     "orbits": [("overview", "Sky"), ("orbits", "Orbits"), ("size", "Size"), ("hazards", "Hazards"), ("discovery", "Discovery"), ("details", "Details"), ("about", "About")],
     "transit": [("overview", "Overview"), ("recovery", "Recovery"), ("stations", "Stations"), ("lines", "Lines"), ("rhythm", "Rhythm"), ("details", "Details"), ("about", "About")],
+    "world": [("overview", "World"), ("countries", "Countries"), ("ageing", "Ageing"), ("growth", "Growth"), ("lives", "Lives"), ("details", "Details"), ("about", "About")],
+    "holiday": [("overview", "Overview"), ("seasons", "Seasons"), ("covid", "COVID"), ("mix", "Mix"), ("countries", "Countries"), ("details", "Details"), ("about", "About")],
+    "bricks": [("overview", "Bricks"), ("themes", "Themes"), ("growth", "Growth"), ("giants", "Giants"), ("details", "Details"), ("about", "About")],
     "bump": [("overview", "Bump chart"), ("flows", "Flows"), ("table", "Rank table"), ("staying", "Staying power"), ("size", "Size"), ("details", "Details"), ("about", "About")],
 }
 LAYOUTS = {"pulse": layout_pulse, "flow": layout_flow, "lab": layout_lab, "board": layout_board, "story": layout_story, "mix": layout_mix, "atlas": layout_atlas, "macro": layout_macro, "catalog": layout_catalog, "climate": layout_climate, "pyramid": layout_pyramid, "bump": layout_bump,
            "people": layout_people, "cycle": layout_cycle, "quake": layout_quake, "desk": layout_desk, "market": layout_market, "grid": layout_grid,
-           "nutri": layout_nutri, "orbits": layout_orbits, "transit": layout_transit}
+           "nutri": layout_nutri, "orbits": layout_orbits, "transit": layout_transit,
+           "world": layout_world, "holiday": layout_holiday, "bricks": layout_bricks}
 
 
 def theme_json():
@@ -1954,7 +2115,7 @@ def build_report(table, title, date, dims, metrics, measures, cols, about=None, 
     labels = {"overview": "Overview", "breakdown": "Breakdown", "compare": "Compare", "trends": "Trends", "matrix": "Matrix", "details": "Details", "about": "About"}
     if layout != "classic":
         keys, labels = [k for k, _ in LAYOUT_PAGES[layout]], dict(LAYOUT_PAGES[layout])
-        if layout in ("pulse", "mix", "macro", "climate", "cycle", "quake", "desk", "grid", "transit") and not date:
+        if layout in ("pulse", "mix", "macro", "climate", "cycle", "quake", "desk", "grid", "transit", "world", "holiday") and not date:
             sys.exit(f"the {layout} layout needs a date column")
     pid_of = {k: oid("page", k) for k in keys}
     tip_pid = oid("page", "tooltip")
@@ -2104,6 +2265,23 @@ def build_report(table, title, date, dims, metrics, measures, cols, about=None, 
                 vis.append(v_shape(pid, f"nav-dot-{k}", cx - d / 2, 69.5 - d / 2, d, d, 20 + i, ACCENT if active else MUTED, shape="oval"))
                 vis += v_button(pid, f"nav-{k}", cx - step / 2 + 2, 80, step - 4, 22, 30 + 2 * i, labels[k], ("page", pid_of[k]), fill=None,
                                 text_color=STYLE["nav_active_text"] if active else STYLE["nav_text"], bold=active, size=10)
+        elif STYLE["header"] == "ledger":       # a title, then the pages as filled tabs sitting on a thick rule
+            vis = [v_textbox(pid, "nav-title", 12, 6, 1240, 40, 2, [(title, {"fontSize": "20pt", "fontWeight": "bold", "color": NAVY})]), v_shape(pid, "nav-rule", 16, 73, 1248, 4, 3, TEAL)]
+            bw = 112
+            for i, k in enumerate(keys):
+                active = k == key
+                vis += v_button(pid, f"nav-{k}", 16 + i * (bw + 4), 47, bw, 26, 10 + 2 * i, labels[k], ("page", pid_of[k]), fill=TEAL if active else EDGE,
+                                text_color=STYLE["nav_active_text"] if active else STYLE["nav_text"], bold=active, size=10)
+        elif STYLE["header"] == "studs":        # a yellow bar with a row of studs along the top, the title in black and the pages as red and white blocks
+            vis = [v_shape(pid, "nav-bg", 0, 0, 1280, 60, 1, NAVY)]
+            for i in range(42):
+                vis.append(v_shape(pid, f"stud-{i}", 12 + i * 30, 3, 12, 12, 2, "#E6B800", shape="oval"))
+            vis.append(v_textbox(pid, "nav-title", 12, 16, 1280 - len(keys) * 100 - 30, 40, 3, [(title, {"fontSize": "17pt", "fontWeight": "bold", "color": INK})]))
+            bw = 96
+            for i, k in enumerate(keys):
+                active = k == key
+                vis += v_button(pid, f"nav-{k}", 1272 - (len(keys) - i) * (bw + 4) + 4, 24, bw, 28, 10 + 2 * i, labels[k], ("page", pid_of[k]), fill=TEAL if active else "#FFFFFF",
+                                text_color="#FFFFFF" if active else INK, bold=active, size=10)
         elif STYLE["header"] == "pillbar":      # a title on the left and the pages inside a rounded pill on the right
             bw = 88
             total = len(keys) * bw + 8
@@ -2407,9 +2585,9 @@ def main():
     ap.add_argument("--geo", help='geographic columns for map visuals, "Column=Category,...": for example "State=StateOrProvince,Lat=Latitude,Lon=Longitude"')
     ap.add_argument("--rows-name", default="Rows", help="name of the row-count measure, for example Patients or Wines")
     ap.add_argument("--style", choices=sorted(STYLES), default="clean",
-                    help="look of the report: meadow (cream and forest green, pages in a pill), radar (green-black with a radar disc), loop (black bar with line-coloured bullets), helpdesk (navy web app with sidebar filters), orchid (dark indigo dashboard), lilac (light lavender dashboard), laurel (black and gold, serif title), solar (indigo with a sun and an orbit of pages), basalt (light with a slim numbered rail), frost (airy ice blue, centred title), pastel (pink and lavender, floating side card), newsprint (a front page in black and red), storm (slate with a numbered rail), terminal (amber on black), garage (cream with a bottom dock),  clean (light, left menu), midnight (dark blue, filters in the header), sunset (brown and orange, tabs on top), "
+                    help="look of the report: atlas (UN blue, tabs on a rule), riviera (sand and teal with a filter panel), brick (yellow bar with studs), meadow (cream and forest green, pages in a pill), radar (green-black with a radar disc), loop (black bar with line-coloured bullets), helpdesk (navy web app with sidebar filters), orchid (dark indigo dashboard), lilac (light lavender dashboard), laurel (black and gold, serif title), solar (indigo with a sun and an orbit of pages), basalt (light with a slim numbered rail), frost (airy ice blue, centred title), pastel (pink and lavender, floating side card), newsprint (a front page in black and red), storm (slate with a numbered rail), terminal (amber on black), garage (cream with a bottom dock),  clean (light, left menu), midnight (dark blue, filters in the header), sunset (brown and orange, tabs on top), "
                          "violet (purple, left menu), neon (black with cyan, tabs at the bottom), paper (cream, serif headline), bordeaux (burgundy rail on the right)")
-    ap.add_argument("--layout", choices=["classic", "pulse", "flow", "lab", "board", "story", "mix", "atlas", "macro", "catalog", "climate", "pyramid", "bump", "people", "cycle", "quake", "desk", "market", "grid", "nutri", "orbits", "transit"], default="classic",
+    ap.add_argument("--layout", choices=["classic", "pulse", "flow", "lab", "board", "story", "mix", "atlas", "macro", "catalog", "climate", "pyramid", "bump", "people", "cycle", "quake", "desk", "market", "grid", "nutri", "orbits", "transit", "world", "holiday", "bricks"], default="classic",
                     help="which pages and charts: classic (bars, donut, scatter, matrices), pulse (time series: combo, heat map, stacked area, gauge), "
                          "flow (categories: funnel, ribbon, waterfall, 100%% stacked), lab (numeric columns: gauge, small multiples, scatter by group), "
                          "board (a ranked table with data bars, actual against target), story (insight cards beside the charts), mix (stacked columns and bars, air-quality bands), "
@@ -2419,6 +2597,7 @@ def main():
                          "desk (service-desk tickets: KPI tiles with sparklines, donuts, top lists, a day-by-hour heat map), market (a rental market: map of cells, prices, hosts), "
                          "grid (a power grid: generation mix, carbon intensity by month and hour), "
                          "nutri (a food composition table: macros, rankings, minerals), orbits (near-Earth objects: orbit space, sizes, discoveries), transit (a rail system: recovery, stations, lines), "
+                         "world (country demography with a play-axis bubble chart), holiday (tourism seasons and the COVID dip), bricks (a set catalogue: themes, sizes, giants), "
                          "atlas (a tile-grid map and a dot map with a ranking), macro (latest values and changes, rates, cycles), catalog (a vehicle catalogue: brands, engines, electric)")
     ap.add_argument("--insight", action="append", help='for the story layout: an insight card as "BIG NUMBER|sentence", repeatable (six are used)')
     ap.add_argument("--measure", action="append", help='custom DAX measure "Name=DAX|format" ({T} = table name); custom measures are used first in cards and charts')
