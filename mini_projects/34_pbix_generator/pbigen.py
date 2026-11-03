@@ -450,6 +450,21 @@ STYLES = {
                  EDGE="#CFDCCB", nav_text="#0F3D2E", nav_active_text="#0F3D2E", radius=8, border=1, dark=False, title_card=False, top_slicers=False,
                  callout="INK", heat=("#F3F7EE", "#B7D6B0", "#2F7D5B"), heat_text="ink", donut_bottom=True,
                  series=["#2F7D5B", "#C9A227", "#1F6F8B", "#B5523B", "#7A9E7E", "#6B4E9B", "#D98E04", "#37474F"]),
+    # a capitol: parchment page, a navy bar with a row of stars and a red rule, a serif face, blue and red (a legislature)
+    "capitol": dict(nav="top", header="stars", top=84, font="Georgia", NAVY="#16264C", TEAL="#B22234", ACCENT="#C9A227", INK="#16264C", MUTED="#6A6F85", BG="#F4F0E6", CARD="#FFFFFF",
+                    EDGE="#DAD3C0", nav_text="#FFFFFF", nav_active_text="#FFFFFF", radius=2, border=1, dark=False, title_card=False, top_slicers=False,
+                    callout="INK", heat=("#2F6DB5", "#F4F0E6", "#B22234"), heat_text="ink", donut_bottom=True,
+                    series=["#2F6DB5", "#B22234", "#C9A227", "#4FB286", "#8E6BBF", "#7A7A7A", "#E8743B", "#16264C"]),
+    # a storm at sea: deep sea blue with a floating dark card for the menu, sea green and amber (a weather record)
+    "cyclone": dict(nav="float", nav_w=160, top=66, NAVY="#0D3B4F", TEAL="#2EC4B6", ACCENT="#FFBF69", INK="#E6F4F1", MUTED="#8FB3BD", BG="#06202C", CARD="#0F3347",
+                    EDGE="#1E5368", nav_text="#9FC6D0", nav_active_text="#06202C", radius=14, border=1, dark=True, title_card=False, top_slicers=False,
+                    callout="ACCENT", heat=("#0F3347", "#17606F", "#1A8C99"), donut_bottom=True,
+                    series=["#2EC4B6", "#FFBF69", "#FF6B6B", "#5BC0EB", "#C792EA", "#9BE564", "#F7F052", "#E6F4F1"]),
+    # a football pitch: a bar of mown stripes with a white touchline, the pages as white boards and a yellow card for the open one (a league)
+    "pitch": dict(nav="top", header="pitch", top=76, NAVY="#0F5B2E", TEAL="#FFD60A", ACCENT="#C8102E", INK="#14281D", MUTED="#6B7F70", BG="#F1F5EF", CARD="#FFFFFF",
+                  EDGE="#D5E0D2", nav_text="#14281D", nav_active_text="#14281D", radius=6, border=1, dark=False, title_card=False, top_slicers=False,
+                  callout="INK", heat=("#F1F7EE", "#B5DDB0", "#52A96A"), heat_text="ink", donut_bottom=True,
+                  series=["#0F5B2E", "#FFD60A", "#C8102E", "#1D70B8", "#7A8B80", "#E87722", "#6F3FA0", "#00A19B"]),
     # warm white with a burgundy rail on the right-hand side
     "bordeaux": dict(nav="right", nav_w=180, NAVY="#4A1424", TEAL="#8C2740", ACCENT="#C9A227", INK="#2B1A1F", MUTED="#7A6168", BG="#F6F1EE", CARD="#FFFFFF",
                      EDGE="#E6D9D4", nav_text="#E8CDD3", nav_active_text="#4A1424", radius=10, border=1, dark=False, title_card=False, top_slicers=False,
@@ -2225,6 +2240,179 @@ def layout_fx(c):
     vis.append(v_gen(pid, "rg", "clusteredBarChart", t, {"Category": [("c", rgroup)], "Y": [("m", ncur)]}, f, f"{ncur} by {lab(rgroup)}", *g(mw + gap, 406, sw, 302), nz(), tip=tip, sort=("m", ncur, "Descending"), units=1))
 
 
+PARTY_COLOURS = {"Democratic": "#2F6DB5", "Republican": "#B22234", "Democratic-Republican": "#4FB286", "Federalist": "#E8A317", "Whig": "#8E6BBF", "Independent": "#7A7A7A",
+                 "Other parties and factions": "#C9B79C"}
+
+
+def layout_congress(c):
+    """The US Congress (one row a member in each Congress, 1789-2025): dims = party, chamber, region, era, experience, age band, state; needs a date (so Year and Month) and columns Congress, Member, Member_id,
+    Age, Term_no, Dim1, Dim2; measures: 1 members, 2 average age, 3 average ideology, 4 share in the first Congress, 5 average Congresses served, 6 Democratic share, 7 Republican share, 8 party gap,
+    9 oldest member, 10 youngest member, 11 ideological spread, 12 Democratic ideology, 13 Republican ideology, 14 Congresses, 15 first year. Pages: Seats, Divide, Ages, States, Careers."""
+    t, f, g, tip, gap = c.table, c.fmts, c.g, c.tip, c.gap
+    party, chamber, region, era, exp, ageb, state = (c.d(i) for i in range(7))
+    members, avg_age, ideo, fresh, served, dem, rep, pgap, oldest, youngest, spread, dem_i, rep_i, ncong, first = (c.m(i) for i in range(15))
+    holders = c.rows_name
+    mw = round(CW * 0.61)
+    sw = CW - mw - gap
+    third = round((CW - 2 * gap) / 3)
+    year_axis = {"categoryAxis": {"axisType": tx("Scalar"), "start": num(1789), "end": num(2025)}}
+    colours = (party, PARTY_COLOURS)
+    pid, vis, nz = c.new_page("overview", c.title)
+    kpi_row(c, pid, vis, nz, [holders, members, avg_age, fresh, ideo], h=100, spark=3, plain=[holders, members])
+    vis.append(v_gen(pid, "area", "stackedAreaChart", t, {"Category": [("c", "Year")], "Series": [("c", party)], "Y": [("m", holders)]}, f, f"{holders} by Congress and {lab(party)}", *g(0, 176, mw, 262), nz(),
+                     tip=tip, legend=True, sort=("c", "Year", "Ascending"), colors=colours, extra=year_axis))
+    vis.append(v_gen(pid, "party", "donutChart", t, {"Category": [("c", party)], "Y": [("m", holders)]}, f, f"{holders} by {lab(party)}", *g(mw + gap, 176, sw, 262), nz(), tip=tip, legend=True, units=1, colors=colours))
+    vis.append(v_gen(pid, "region", "hundredPercentStackedColumnChart", t, {"Category": [("c", era)], "Series": [("c", region)], "Y": [("m", holders)]}, f, f"Share of {holders.lower()} by {lab(era)} and {lab(region)}",
+                     *g(0, 450, mw, 258), nz(), tip=tip, legend=True, sort=("c", era, "Ascending")))
+    vis.append(v_gen(pid, "chamber", "clusteredColumnChart", t, {"Category": [("c", era)], "Series": [("c", chamber)], "Y": [("m", members)]}, f, f"{members} by {lab(era)} and {lab(chamber)}", *g(mw + gap, 450, sw, 258), nz(),
+                     tip=tip, legend=True, sort=("c", era, "Ascending"), units=1))
+
+    pid, vis, nz = c.new_page("divide", "Left, right and the widening gap")
+    vis.append(v_gen(pid, "play", "scatterChart", t, {"Category": [("c", "Member")], "X": [("c", "Dim1")], "Y": [("c", "Dim2")], "Series": [("c", party)], "Play": [("c", "Congress")]}, f,
+                     "Every member of Congress by ideology: liberal to conservative (left to right) and the second dimension (press play to move through the Congresses)", *g(0, 64, mw, 644), nz(), tip=tip,
+                     legend=True, no_labels=True, colors=colours, ranges=((-1.05, 1.05), (-1.05, 1.05))))
+    vis.append(v_gen(pid, "lines", "lineChart", t, {"Category": [("c", "Year")], "Y": [("m", dem_i), ("m", rep_i)]}, f, f"{dem_i} and {rep_i} by Congress", *g(mw + gap, 64, sw, 330), nz(), tip=tip,
+                     legend=True, sort=("c", "Year", "Ascending"), extra={"categoryAxis": {"axisType": tx("Scalar"), "start": num(1837), "end": num(2025)}}))
+    vis.append(v_gen(pid, "gap", "areaChart", t, {"Category": [("c", "Year")], "Y": [("m", pgap)]}, f, f"{pgap} (Republican minus Democratic ideology)", *g(mw + gap, 406, sw, 302), nz(), tip=tip,
+                     sort=("c", "Year", "Ascending"), extra={"categoryAxis": {"axisType": tx("Scalar"), "start": num(1857), "end": num(2025)}}))
+
+    pid, vis, nz = c.new_page("ages", "An older Congress")
+    vis.append(v_gen(pid, "age", "lineChart", t, {"Category": [("c", "Year")], "Series": [("c", chamber)], "Y": [("m", avg_age)]}, f, f"{avg_age} by Congress and {lab(chamber)}", *g(0, 64, mw, 330), nz(), tip=tip,
+                     legend=True, sort=("c", "Year", "Ascending"), extra=year_axis))
+    vis.append(v_gen(pid, "band", "hundredPercentStackedColumnChart", t, {"Category": [("c", era)], "Series": [("c", ageb)], "Y": [("m", holders)]}, f, f"Share of {holders.lower()} by {lab(ageb)} and {lab(era)}",
+                     *g(mw + gap, 64, sw, 330), nz(), tip=tip, legend=True, sort=("c", era, "Ascending")))
+    vis.append(v_gen(pid, "party", "clusteredColumnChart", t, {"Category": [("c", era)], "Series": [("c", party)], "Y": [("m", avg_age)]}, f, f"{avg_age} by {lab(era)} and {lab(party)}", *g(0, 406, mw, 302), nz(),
+                     tip=tip, legend=True, sort=("c", era, "Ascending"), colors=colours))
+    vis.append(v_rank(pid, t, ["Member", party], [oldest, youngest], oldest, f, "The oldest members", *g(mw + gap, 406, sw, 302), nz(), oldest, size=10, first_width=170))
+
+    pid, vis, nz = c.new_page("states", "State by state")
+    vis.append(v_heat(pid, t, state, era, ideo, f, f"{ideo}: {lab(state)} by {lab(era)} (blue is to the left, red to the right)", *g(0, 64, mw, 644), nz(), size=9, totals=False))
+    vis.append(v_gen(pid, "region", "clusteredBarChart", t, {"Category": [("c", region)], "Y": [("m", ideo)]}, f, f"{ideo} by {lab(region)}", *g(mw + gap, 64, sw, 330), nz(), tip=tip, sort=("m", ideo, "Descending")))
+    vis.append(v_gen(pid, "reglines", "lineChart", t, {"Category": [("c", "Year")], "Series": [("c", region)], "Y": [("m", ideo)]}, f, f"{ideo} by Congress and {lab(region)}", *g(mw + gap, 406, sw, 302), nz(),
+                     tip=tip, legend=True, sort=("c", "Year", "Ascending"), extra={"categoryAxis": {"axisType": tx("Scalar"), "start": num(1837), "end": num(2025)}}))
+
+    pid, vis, nz = c.new_page("careers", "How long members stay")
+    vis.append(v_gen(pid, "exp", "hundredPercentStackedColumnChart", t, {"Category": [("c", era)], "Series": [("c", exp)], "Y": [("m", holders)]}, f, f"Share of {holders.lower()} by {lab(exp)} and {lab(era)}",
+                     *g(0, 64, mw, 330), nz(), tip=tip, legend=True, sort=("c", era, "Ascending")))
+    vis.append(v_gen(pid, "fresh", "lineChart", t, {"Category": [("c", "Year")], "Series": [("c", chamber)], "Y": [("m", fresh)]}, f, f"{fresh} by Congress and {lab(chamber)}", *g(mw + gap, 64, sw, 330), nz(), tip=tip,
+                     legend=True, sort=("c", "Year", "Ascending"), extra=year_axis))
+    vis.append(v_gen(pid, "served", "areaChart", t, {"Category": [("c", "Year")], "Y": [("m", served)]}, f, f"{served} by Congress", *g(0, 406, third, 302), nz(), tip=tip, sort=("c", "Year", "Ascending"), extra=year_axis))
+    vis.append(v_gen(pid, "funnel", "funnel", t, {"Category": [("c", exp)], "Y": [("m", holders)]}, f, f"{holders} by {lab(exp)}", *g(third + gap, 406, third, 302), nz(), tip=tip, sort=("c", exp, "Ascending"), units=1))
+    vis.append(v_rank(pid, t, ["Member", party], [ncong, first], ncong, f, "The longest careers", *g(2 * (third + gap), 406, third, 302), nz(), ncong, size=10, first_width=150))
+
+
+CAT_COLOURS = {"1 Depression (under 34 kt)": "#8FB3BD", "2 Tropical storm (34 to 63 kt)": "#2EC4B6", "3 Category 1 (64 to 82 kt)": "#F7F052", "4 Category 2 (83 to 95 kt)": "#FFBF69",
+               "5 Category 3 (96 to 112 kt)": "#FF8A5B", "6 Category 4 (113 to 136 kt)": "#FF4D4D", "7 Category 5 (137 kt and over)": "#E040FB", "0 Wind not listed": "#6F8791"}
+GROUP_COLOURS = {"1 Depression": "#8FB3BD", "2 Tropical storm": "#2EC4B6", "3 Hurricane (category 1 or 2)": "#FFBF69", "4 Major hurricane (category 3 to 5)": "#FF4D4D"}
+HURR_CATS = ["3 Category 1 (64 to 82 kt)", "4 Category 2 (83 to 95 kt)", "5 Category 3 (96 to 112 kt)", "6 Category 4 (113 to 136 kt)", "7 Category 5 (137 kt and over)"]
+TOP_STORMS = ["Wilma 2005", "Gilbert 1988", "Unnamed 3/1935", "Rita 2005", "Milton 2024", "Allen 1980", "Camille 1969", "Katrina 2005", "Mitch 1998", "Dean 2007", "Maria 2017", "Unnamed 10/1924"]
+
+
+def layout_storms(c):
+    """Atlantic tropical cyclones (one row a position of a storm, 1851-2024): dims = peak group, category, status, zone, era, decade, calendar month, peak category, storm, name; needs a date (so Year and
+    Month) and columns Storm_id, Position, Lat, Lon, Cell, Cell_lat, Cell_lon, Wind_kt, Pressure_mb, Peak_wind_kt, Landfall, ACE_term; measures: 1 storms, 2 hurricanes, 3 major hurricanes, 4 strongest wind,
+    5 lowest pressure, 6 accumulated cyclone energy, 7 landfalls, 8 average wind, 9 share that became hurricanes, 10 storm-days, 11 storms a year, 12 share of the positions in the month. Pages: Seasons, Tracks, Intensity, Calendar, Records."""
+    t, f, g, tip, gap = c.table, c.fmts, c.g, c.tip, c.gap
+    group, cat, status, zone, era, dec, cmonth, peakcat, storm, name = (c.d(i) for i in range(10))
+    storms, hurr, major, wind, pres, ace, landfalls, avg_wind, hshare, sdays, per_year, mshare = (c.m(i) for i in range(12))
+    pos = c.rows_name
+    mw = round(CW * 0.61)
+    sw = CW - mw - gap
+    year_axis = {"categoryAxis": {"axisType": tx("Scalar"), "start": num(1851), "end": num(2024)}}
+    gcol = (group, GROUP_COLOURS)
+    pid, vis, nz = c.new_page("overview", c.title)
+    kpi_row(c, pid, vis, nz, [storms, hurr, major, wind, ace], h=100, spark=3, plain=[storms, hurr, major, wind, ace])
+    vis.append(v_gen(pid, "years", "columnChart", t, {"Category": [("c", "Year")], "Series": [("c", group)], "Y": [("m", storms)]}, f, f"{storms} by year and {lab(group)}", *g(0, 176, mw, 262), nz(), tip=tip,
+                     legend=True, sort=("c", "Year", "Ascending"), units=1, colors=gcol, extra=year_axis))
+    vis.append(v_gen(pid, "donut", "donutChart", t, {"Category": [("c", group)], "Y": [("m", storms)]}, f, f"{storms} by {lab(group)}", *g(mw + gap, 176, sw, 262), nz(), tip=tip, legend=True, units=1, colors=gcol))
+    vis.append(v_gen(pid, "ace", "areaChart", t, {"Category": [("c", "Year")], "Y": [("m", ace)]}, f, f"{ace} by year", *g(0, 450, mw, 258), nz(), tip=tip, sort=("c", "Year", "Ascending"), extra=year_axis))
+    vis.append(v_gen(pid, "decade", "clusteredColumnChart", t, {"Category": [("c", dec)], "Y": [("m", hshare)]}, f, f"{hshare} by {lab(dec)}", *g(mw + gap, 450, sw, 258), nz(), tip=tip, sort=("c", dec, "Ascending")))
+
+    pid, vis, nz = c.new_page("tracks", "Where the storms go")
+    vis.append(v_gen(pid, "tracks", "scatterChart", t, {"Category": [("c", "Position")], "X": [("c", "Lon")], "Y": [("c", "Lat")], "Series": [("c", storm)]}, f,
+                     "The twelve most intense storms (lowest pressure): every six-hourly position", *g(0, 64, mw, 644), nz(), tip=tip, legend=True, no_labels=True, vfilter=(storm, TOP_STORMS), ranges=((-100, 0), (8, 50))))
+    vis.append(v_gen(pid, "density", "scatterChart", t, {"Category": [("c", "Cell")], "X": [("c", "Cell_lon")], "Y": [("c", "Cell_lat")], "Size": [("m", pos)]}, f,
+                     f"Where hurricane-force winds have been: a dot for every 4 degree cell (size: {pos.lower()})", *g(mw + gap, 64, sw, 330), nz(), tip=tip, no_labels=True, vfilter=(cat, HURR_CATS),
+                     ranges=((-100, 0), (8, 55))))
+    vis.append(v_gen(pid, "zone", "clusteredBarChart", t, {"Category": [("c", zone)], "Y": [("m", ace)]}, f, f"{ace} by {lab(zone)}", *g(mw + gap, 406, sw, 302), nz(), tip=tip, sort=("m", ace, "Descending"), units=1))
+
+    pid, vis, nz = c.new_page("intensity", "How strong they get")
+    vis.append(v_gen(pid, "cat", "clusteredColumnChart", t, {"Category": [("c", cat)], "Y": [("m", pos)]}, f, f"{pos} by {lab(cat)}", *g(0, 64, mw, 330), nz(), tip=tip, sort=("c", cat, "Ascending"), units=1))
+    vis.append(v_gen(pid, "peak", "hundredPercentStackedColumnChart", t, {"Category": [("c", dec)], "Series": [("c", group)], "Y": [("m", storms)]}, f, f"Share of {storms.lower()} by {lab(group)} and {lab(dec)}",
+                     *g(mw + gap, 64, sw, 330), nz(), tip=tip, legend=True, sort=("c", dec, "Ascending"), colors=gcol))
+    vis.append(v_gen(pid, "wind", "lineChart", t, {"Category": [("c", dec)], "Y": [("m", wind)]}, f, f"{wind} by {lab(dec)}", *g(0, 406, third_(mw), 302), nz(), tip=tip, sort=("c", dec, "Ascending")))
+    vis.append(v_gen(pid, "pres", "lineChart", t, {"Category": [("c", dec)], "Y": [("m", pres)]}, f, f"{pres} by {lab(dec)} (the lowest one on record)", *g(third_(mw) + gap, 406, mw - third_(mw) - gap, 302), nz(), tip=tip,
+                     sort=("c", dec, "Ascending")))
+    vis.append(v_gen(pid, "status", "donutChart", t, {"Category": [("c", status)], "Y": [("m", pos)]}, f, f"{pos} by {lab(status)}", *g(mw + gap, 406, sw, 302), nz(), tip=tip, legend=True, units=1))
+
+    pid, vis, nz = c.new_page("calendar", "The hurricane season")
+    vis.append(v_heat(pid, t, cmonth, dec, storms, f, f"{storms}: {lab(cmonth)} by {lab(dec)} (the stronger the colour, the more)", *g(0, 64, mw, 330), nz(), size=10, totals=False))
+    vis.append(v_gen(pid, "season", "lineChart", t, {"Category": [("c", cmonth)], "Series": [("c", era)], "Y": [("m", mshare)]}, f, f"{mshare} by {lab(era)}", *g(mw + gap, 64, sw, 330), nz(), tip=tip,
+                     legend=True, sort=("c", cmonth, "Ascending")))
+    vis.append(v_gen(pid, "ace", "areaChart", t, {"Category": [("c", cmonth)], "Y": [("m", ace)]}, f, f"{ace} by {lab(cmonth)}", *g(0, 406, mw, 302), nz(), tip=tip, sort=("c", cmonth, "Ascending")))
+    vis.append(v_gen(pid, "land", "clusteredColumnChart", t, {"Category": [("c", dec)], "Y": [("m", landfalls)]}, f, f"{landfalls} by {lab(dec)}", *g(mw + gap, 406, sw, 302), nz(), tip=tip, sort=("c", dec, "Ascending")))
+
+    pid, vis, nz = c.new_page("records", "The storms of record")
+    half = round((CW - gap) / 2)
+    vis.append(v_rank(pid, t, [storm, group], [ace, wind, pres, landfalls], ace, f, "The storms with the most energy (ACE)", *g(0, 64, half, 644), nz(), ace, size=10, first_width=150))
+    vis.append(v_rank(pid, t, [storm, group], [wind, pres, ace, landfalls], wind, f, "The storms with the strongest winds", *g(half + gap, 64, half, 644), nz(), wind, size=10, first_width=150))
+
+
+def third_(w):
+    return round((w - 12) / 2)
+
+
+LEAGUE_TOP = ["Man United", "Arsenal", "Chelsea", "Liverpool", "Man City", "Tottenham", "Everton", "Newcastle"]
+
+
+def layout_league(c):
+    """A football league (one row a team in a match, 1993/94-2025/26): dims = team, season, venue, result, era, weekday, half-time position, referee, opponent; needs a date (so Year and Month) and columns
+    Match_id, Points, Goals_for, Goals_against, Shots, Shots_on_target, Corners, Fouls, Yellow_cards, Red_cards; measures: 1 matches played, 2 clubs, 3 goals per match, 4 home win share, 5 draw share,
+    6 away win share, 7 points per match, 8 win rate, 9 goals scored per match, 10 goals conceded per match, 11 goal difference, 12 points, 13 rank score, 14 league position, 15 league position (axis),
+    16 seasons as champions, 17 seasons in the league, 18 best finish, 19 shots per match, 20 shot accuracy, 21 conversion rate, 22 yellow cards, 23 red cards, 24 fouls, 25 clean sheet share,
+    26 comeback wins, 27 corners, 28 shots on target, 29 home advantage. Pages: Seasons, Table, Points, Style, Referees."""
+    t, f, g, tip, gap = c.table, c.fmts, c.g, c.tip, c.gap
+    team, season, venue, result, era, wday, htp, ref, opp = (c.d(i) for i in range(9))
+    (matches, clubs, gpm, homew, draws, awayw, ppm, winr, gfpm, gapm, gd, points, rscore, pos, pos_axis, champs, nseasons, best, shots, acc, conv, yellow, red, fouls, clean, comeback, corners, sot,
+     homeadv) = (c.m(i) for i in range(29))
+    tm = c.rows_name
+    mw = round(CW * 0.61)
+    sw = CW - mw - gap
+    half = round((CW - gap) / 2)
+    modern = ["2 2000/01 to 2009/10", "3 2010/11 to 2019/20", "4 2020/21 onwards"]
+    pid, vis, nz = c.new_page("overview", c.title)
+    kpi_row(c, pid, vis, nz, [matches, gpm, homew, draws, clubs], h=100, spark=3, plain=[matches, clubs])
+    vis.append(v_gen(pid, "goals", "clusteredColumnChart", t, {"Category": [("c", season)], "Y": [("m", gpm)]}, f, f"{gpm} by {lab(season)}", *g(0, 176, mw, 262), nz(), tip=tip, sort=("c", season, "Ascending")))
+    vis.append(v_gen(pid, "results", "lineChart", t, {"Category": [("c", season)], "Y": [("m", homew), ("m", draws), ("m", awayw)]}, f, f"{homew}, {lab(draws)} and {lab(awayw)} by {lab(season)}", *g(mw + gap, 176, sw, 262),
+                     nz(), tip=tip, legend=True, sort=("c", season, "Ascending")))
+    vis.append(v_gen(pid, "adv", "areaChart", t, {"Category": [("c", season)], "Y": [("m", homeadv)]}, f, f"{homeadv} by {lab(season)}", *g(0, 450, mw, 258), nz(), tip=tip, sort=("c", season, "Ascending")))
+    vis.append(v_gen(pid, "home", "donutChart", t, {"Category": [("c", result)], "Y": [("m", tm)]}, f, "How home matches end", *g(mw + gap, 450, sw, 258), nz(), tip=tip, legend=True, units=1, vfilter=(venue, ["Home"])))
+
+    pid, vis, nz = c.new_page("table", "Who finishes where")
+    vis.append(v_gen(pid, "bump", "lineChart", t, {"Category": [("c", season)], "Series": [("c", team)], "Y": [("m", pos_axis)]}, f, f"{pos} by season for eight big clubs (1 is the champion, at the top)", *g(0, 64, CW, 330),
+                     nz(), tip=tip, legend=True, sort=("c", season, "Ascending"), vfilter=(team, LEAGUE_TOP), extra={"lineStyles": {"strokeWidth": num(3), "showMarker": flag(True), "markerSize": num(6)}}))
+    vis.append(v_rank(pid, t, [team], [nseasons, tm, ppm, winr, gd, champs, best], ppm, f, "The clubs compared", *g(0, 406, CW, 302), nz(), ppm, size=10, first_width=150))
+
+    pid, vis, nz = c.new_page("points", "Every club, every season")
+    vis.append(v_heat(pid, t, team, season, points, f, f"{points}: {lab(team)} by {lab(season)} (the stronger the colour, the more points)", *g(0, 64, CW, 644), nz(), size=8, totals=False))
+
+    pid, vis, nz = c.new_page("style", "Shots, cards and fouls")
+    vis.append(v_gen(pid, "shots", "lineClusteredColumnComboChart", t, {"Category": [("c", season)], "Y": [("m", shots)], "Y2": [("m", conv)]}, f, f"{shots} (columns) and {lab(conv)} (line), from 2000/01", *g(0, 64, mw, 330),
+                     nz(), tip=tip, legend=True, sort=("c", season, "Ascending"), vfilter=(era, modern)))
+    vis.append(v_gen(pid, "yellow", "clusteredColumnChart", t, {"Category": [("c", season)], "Y": [("m", yellow)]}, f, f"{yellow} by {lab(season)}", *g(mw + gap, 64, sw, 330), nz(), tip=tip, sort=("c", season, "Ascending"),
+                     vfilter=(era, modern)))
+    vis.append(v_gen(pid, "scatter", "scatterChart", t, {"Category": [("c", team)], "X": [("m", gfpm)], "Y": [("m", gapm)], "Size": [("m", tm)]}, f, f"{gapm} against {lab(gfpm)}, a dot for every club", *g(0, 406, mw, 302),
+                     nz(), tip=tip))
+    vis.append(v_gen(pid, "red", "lineChart", t, {"Category": [("c", season)], "Y": [("m", red)]}, f, f"{red} by {lab(season)}", *g(mw + gap, 406, sw, 302), nz(), tip=tip, sort=("c", season, "Ascending"),
+                     vfilter=(era, modern)))
+
+    pid, vis, nz = c.new_page("referees", "Referees, weekdays and comebacks")
+    vis.append(v_rank(pid, t, [ref], [tm, yellow, red, fouls, homew], tm, f, "The referees compared (from 2000/01)", *g(0, 64, mw, 644), nz(), tm, size=10, first_width=140, vfilter=(era, modern)))
+    vis.append(v_gen(pid, "weekday", "clusteredColumnChart", t, {"Category": [("c", wday)], "Y": [("m", gpm)]}, f, f"{gpm} by {lab(wday)}", *g(mw + gap, 64, sw, 330), nz(), tip=tip, sort=("c", wday, "Ascending")))
+    vis.append(v_gen(pid, "comeback", "clusteredColumnChart", t, {"Category": [("c", season)], "Y": [("m", comeback)]}, f, f"{comeback} by {lab(season)}", *g(mw + gap, 406, sw, 302), nz(), tip=tip,
+                     sort=("c", season, "Ascending"), vfilter=(era, modern)))
+
+
 LAYOUT_PAGES = {
     "pulse": [("overview", "Overview"), ("rhythm", "Rhythm"), ("weather", "Weather"), ("seasons", "Seasons"), ("details", "Details"), ("about", "About")],
     "flow": [("overview", "Overview"), ("patients", "Patients"), ("stay", "Stay"), ("treatment", "Treatment"), ("details", "Details"), ("about", "About")],
@@ -2252,13 +2440,17 @@ LAYOUT_PAGES = {
     "sats": [("overview", "Launches"), ("constellations", "Constellations"), ("orbits", "Orbits"), ("countries", "Countries"), ("rockets", "Rockets"), ("details", "Details"), ("about", "About")],
     "roads": [("overview", "Roads"), ("time", "Time"), ("conditions", "Conditions"), ("speed", "Speed"), ("places", "Places"), ("details", "Details"), ("about", "About")],
     "fx": [("overview", "Rates"), ("years", "Years"), ("shocks", "Shocks"), ("ranks", "Ranks"), ("lives", "Lives"), ("details", "Details"), ("about", "About")],
+    "congress": [("overview", "Seats"), ("divide", "Divide"), ("ages", "Ages"), ("states", "States"), ("careers", "Careers"), ("details", "Details"), ("about", "About")],
+    "storms": [("overview", "Seasons"), ("tracks", "Tracks"), ("intensity", "Intensity"), ("calendar", "Calendar"), ("records", "Records"), ("details", "Details"), ("about", "About")],
+    "league": [("overview", "Seasons"), ("table", "Table"), ("points", "Points"), ("style", "Style"), ("referees", "Referees"), ("details", "Details"), ("about", "About")],
     "bump": [("overview", "Bump chart"), ("flows", "Flows"), ("table", "Rank table"), ("staying", "Staying power"), ("size", "Size"), ("details", "Details"), ("about", "About")],
 }
 LAYOUTS = {"pulse": layout_pulse, "flow": layout_flow, "lab": layout_lab, "board": layout_board, "story": layout_story, "mix": layout_mix, "atlas": layout_atlas, "macro": layout_macro, "catalog": layout_catalog, "climate": layout_climate, "pyramid": layout_pyramid, "bump": layout_bump,
            "people": layout_people, "cycle": layout_cycle, "quake": layout_quake, "desk": layout_desk, "market": layout_market, "grid": layout_grid,
            "nutri": layout_nutri, "orbits": layout_orbits, "transit": layout_transit,
            "world": layout_world, "holiday": layout_holiday, "bricks": layout_bricks,
-           "sats": layout_sats, "roads": layout_roads, "fx": layout_fx}
+           "sats": layout_sats, "roads": layout_roads, "fx": layout_fx,
+           "congress": layout_congress, "storms": layout_storms, "league": layout_league}
 
 
 def theme_json():
@@ -2294,7 +2486,7 @@ def build_report(table, title, date, dims, metrics, measures, cols, about=None, 
     labels = {"overview": "Overview", "breakdown": "Breakdown", "compare": "Compare", "trends": "Trends", "matrix": "Matrix", "details": "Details", "about": "About"}
     if layout != "classic":
         keys, labels = [k for k, _ in LAYOUT_PAGES[layout]], dict(LAYOUT_PAGES[layout])
-        if layout in ("pulse", "mix", "macro", "climate", "cycle", "quake", "desk", "grid", "transit", "world", "holiday", "sats", "roads", "fx") and not date:
+        if layout in ("pulse", "mix", "macro", "climate", "cycle", "quake", "desk", "grid", "transit", "world", "holiday", "sats", "roads", "fx", "congress", "storms", "league") and not date:
             sys.exit(f"the {layout} layout needs a date column")
     pid_of = {k: oid("page", k) for k in keys}
     tip_pid = oid("page", "tooltip")
@@ -2471,6 +2663,24 @@ def build_report(table, title, date, dims, metrics, measures, cols, about=None, 
                 active = k == key
                 vis += v_button(pid, f"nav-{k}", 1272 - (len(keys) - i) * (bw + 4) + 4, 14, bw, 30, 10 + 2 * i, labels[k], ("page", pid_of[k]), fill=TEAL if active else ACCENT,
                                 text_color=INK if active else "#FFFFFF", bold=active, size=10)
+        elif STYLE["header"] == "stars":        # a navy bar with a row of stars and a red rule, the title in a serif face and the pages as buttons
+            vis = [v_shape(pid, "nav-bg", 0, 0, 1280, 64, 1, NAVY), v_shape(pid, "nav-rule", 0, 64, 1280, 4, 2, TEAL),
+                   v_textbox(pid, "nav-stars", 14, 1, 1252, 16, 3, [("\u2605 " * 80, {"fontSize": "7pt", "color": ACCENT})]),
+                   v_textbox(pid, "nav-title", 14, 16, 1280 - len(keys) * 100 - 40, 40, 4, [(title, {"fontSize": "17pt", "fontWeight": "bold", "color": "#FFFFFF", "fontFamily": STYLE["font"]})])]
+            bw = 96
+            for i, k in enumerate(keys):
+                active = k == key
+                vis += v_button(pid, f"nav-{k}", 1272 - (len(keys) - i) * (bw + 4) + 4, 24, bw, 28, 10 + 2 * i, labels[k], ("page", pid_of[k]), fill=TEAL if active else "#2B467F",
+                                text_color="#FFFFFF", bold=active, size=10)
+        elif STYLE["header"] == "pitch":        # a bar of mown stripes with a white touchline, the pages as white boards and a yellow card for the open page
+            vis = [v_shape(pid, f"stripe-{i}", i * 80, 0, 80, 64, 1, NAVY if i % 2 == 0 else "#13683A") for i in range(16)]
+            vis.append(v_shape(pid, "touchline", 0, 61, 1280, 3, 2, "#FFFFFF"))
+            vis.append(v_textbox(pid, "nav-title", 14, 12, 1280 - len(keys) * 100 - 40, 40, 4, [(title, {"fontSize": "17pt", "fontWeight": "bold", "color": "#FFFFFF"})]))
+            bw = 96
+            for i, k in enumerate(keys):
+                active = k == key
+                vis += v_button(pid, f"nav-{k}", 1272 - (len(keys) - i) * (bw + 4) + 4, 16, bw, 28, 10 + 2 * i, labels[k], ("page", pid_of[k]), fill=TEAL if active else "#FFFFFF",
+                                text_color=INK, bold=active, size=10)
         elif STYLE["header"] == "pillbar":      # a title on the left and the pages inside a rounded pill on the right
             bw = 88
             total = len(keys) * bw + 8
@@ -2774,9 +2984,9 @@ def main():
     ap.add_argument("--geo", help='geographic columns for map visuals, "Column=Category,...": for example "State=StateOrProvince,Lat=Latitude,Lon=Longitude"')
     ap.add_argument("--rows-name", default="Rows", help="name of the row-count measure, for example Patients or Wines")
     ap.add_argument("--style", choices=sorted(STYLES), default="clean",
-                    help="look of the report: blueprint (drawing-board blue, orange menu), tarmac (a bar with a yellow centre line, road-sign tabs), bank (mint paper, green bars, gold, tabs at the bottom), atlas (UN blue, tabs on a rule), riviera (sand and teal with a filter panel), brick (yellow bar with studs), meadow (cream and forest green, pages in a pill), radar (green-black with a radar disc), loop (black bar with line-coloured bullets), helpdesk (navy web app with sidebar filters), orchid (dark indigo dashboard), lilac (light lavender dashboard), laurel (black and gold, serif title), solar (indigo with a sun and an orbit of pages), basalt (light with a slim numbered rail), frost (airy ice blue, centred title), pastel (pink and lavender, floating side card), newsprint (a front page in black and red), storm (slate with a numbered rail), terminal (amber on black), garage (cream with a bottom dock),  clean (light, left menu), midnight (dark blue, filters in the header), sunset (brown and orange, tabs on top), "
+                    help="look of the report: capitol (parchment, navy bar with stars), cyclone (deep sea blue, floating menu), pitch (mown stripes, yellow card), blueprint (drawing-board blue, orange menu), tarmac (a bar with a yellow centre line, road-sign tabs), bank (mint paper, green bars, gold, tabs at the bottom), atlas (UN blue, tabs on a rule), riviera (sand and teal with a filter panel), brick (yellow bar with studs), meadow (cream and forest green, pages in a pill), radar (green-black with a radar disc), loop (black bar with line-coloured bullets), helpdesk (navy web app with sidebar filters), orchid (dark indigo dashboard), lilac (light lavender dashboard), laurel (black and gold, serif title), solar (indigo with a sun and an orbit of pages), basalt (light with a slim numbered rail), frost (airy ice blue, centred title), pastel (pink and lavender, floating side card), newsprint (a front page in black and red), storm (slate with a numbered rail), terminal (amber on black), garage (cream with a bottom dock),  clean (light, left menu), midnight (dark blue, filters in the header), sunset (brown and orange, tabs on top), "
                          "violet (purple, left menu), neon (black with cyan, tabs at the bottom), paper (cream, serif headline), bordeaux (burgundy rail on the right)")
-    ap.add_argument("--layout", choices=["classic", "pulse", "flow", "lab", "board", "story", "mix", "atlas", "macro", "catalog", "climate", "pyramid", "bump", "people", "cycle", "quake", "desk", "market", "grid", "nutri", "orbits", "transit", "world", "holiday", "bricks", "sats", "roads", "fx"], default="classic",
+    ap.add_argument("--layout", choices=["classic", "pulse", "flow", "lab", "board", "story", "mix", "atlas", "macro", "catalog", "climate", "pyramid", "bump", "people", "cycle", "quake", "desk", "market", "grid", "nutri", "orbits", "transit", "world", "holiday", "bricks", "sats", "roads", "fx", "congress", "storms", "league"], default="classic",
                     help="which pages and charts: classic (bars, donut, scatter, matrices), pulse (time series: combo, heat map, stacked area, gauge), "
                          "flow (categories: funnel, ribbon, waterfall, 100%% stacked), lab (numeric columns: gauge, small multiples, scatter by group), "
                          "board (a ranked table with data bars, actual against target), story (insight cards beside the charts), mix (stacked columns and bars, air-quality bands), "
@@ -2788,6 +2998,7 @@ def main():
                          "nutri (a food composition table: macros, rankings, minerals), orbits (near-Earth objects: orbit space, sizes, discoveries), transit (a rail system: recovery, stations, lines), "
                          "world (country demography with a play-axis bubble chart), holiday (tourism seasons and the COVID dip), bricks (a set catalogue: themes, sizes, giants), "
                          "sats (a satellite catalogue: orbits, constellations, countries), roads (road collisions: time, conditions, speed, places), fx (exchange rates: strength, volatility, lifespans), "
+                         "congress (a legislature: seats, ideology, ages, careers), storms (tropical cyclones: seasons, tracks, intensity, records), league (a football league: table, points, style, referees), "
                          "atlas (a tile-grid map and a dot map with a ranking), macro (latest values and changes, rates, cycles), catalog (a vehicle catalogue: brands, engines, electric)")
     ap.add_argument("--insight", action="append", help='for the story layout: an insight card as "BIG NUMBER|sentence", repeatable (six are used)')
     ap.add_argument("--measure", action="append", help='custom DAX measure "Name=DAX|format" ({T} = table name); custom measures are used first in cards and charts')
