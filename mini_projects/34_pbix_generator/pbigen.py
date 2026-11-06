@@ -480,6 +480,21 @@ STYLES = {
                     EDGE="#F0D9BF", nav_text="#7A4A2B", nav_active_text="#FFFFFF", radius=10, border=1, dark=False, title_card=False, top_slicers=True,
                     callout="TEAL", heat=("#FFF3E3", "#F7B267", "#E4572E"), heat_text="ink", donut_bottom=True,
                     series=["#E4572E", "#2E86AB", "#F2A541", "#5B8E7D", "#8E5572", "#F6C85F", "#6F9CEB", "#A0A0A0"]),
+    # a till receipt: warm paper, a monospace face, a dashed rule, black ink with a red total, the pages numbered like items (prices)
+    "receipt": dict(nav="top", header="receipt", top=84, font="Consolas", NAVY="#FFFDF6", TEAL="#1C1C1C", ACCENT="#D7263D", INK="#1C1C1C", MUTED="#6B6B6B", BG="#EFEBDD", CARD="#FFFDF6",
+                    EDGE="#CFC8B4", nav_text="#1C1C1C", nav_active_text="#FFFFFF", radius=0, border=1, dark=False, title_card=False, top_slicers=False,
+                    callout="ACCENT", heat=("#CFE0F2", "#FFFDF0", "#E8606E"), heat_text="ink", donut_bottom=True,
+                    series=["#1C1C1C", "#D7263D", "#1F6FB5", "#7A8B2E", "#E09F1F", "#8A5A9E", "#2A9D8F", "#8C8C8C"]),
+    # a city skyline: a sky-blue header with two rows of buildings along its foot, slate and orange on a warm white page (house prices)
+    "skyline": dict(nav="top", header="skyline", top=90, NAVY="#D6E9F5", TEAL="#2F4858", ACCENT="#F26419", INK="#1F2D3A", MUTED="#6B7C8A", BG="#F5F3EE", CARD="#FFFFFF",
+                    EDGE="#DDD8CC", nav_text="#2F4858", nav_active_text="#FFFFFF", radius=8, border=1, dark=False, title_card=False, top_slicers=False,
+                    callout="ACCENT", heat=("#4F8DB8", "#F5F3EE", "#F26419"), heat_text="ink", donut_bottom=True,
+                    series=["#2F4858", "#F26419", "#33A1C9", "#86BBD8", "#F6AE2D", "#758E4F", "#9A348E", "#8D99AE"]),
+    # a substation: near-black with a caution-tape strip under the header, hazard yellow and orange (power plants)
+    "voltage": dict(nav="top", header="hazard", top=86, NAVY="#15181B", TEAL="#FFD400", ACCENT="#FF7A00", INK="#E9EDF0", MUTED="#8D979F", BG="#0E1114", CARD="#171B1F",
+                    EDGE="#2A3138", nav_text="#E9EDF0", nav_active_text="#15181B", radius=4, border=1, dark=True, title_card=False, top_slicers=False,
+                    callout="TEAL", heat=("#171B1F", "#4D4000", "#A38600"), donut_bottom=True,
+                    series=["#FFD400", "#2EC4B6", "#FF7A00", "#4DA3FF", "#B388FF", "#7BD389", "#FF5C8A", "#C0C6CC"]),
     # warm white with a burgundy rail on the right-hand side
     "bordeaux": dict(nav="right", nav_w=180, NAVY="#4A1424", TEAL="#8C2740", ACCENT="#C9A227", INK="#2B1A1F", MUTED="#7A6168", BG="#F6F1EE", CARD="#FFFFFF",
                      EDGE="#E6D9D4", nav_text="#E8CDD3", nav_active_text="#4A1424", radius=10, border=1, dark=False, title_card=False, top_slicers=False,
@@ -2628,6 +2643,219 @@ def layout_nations(c):
                      legend=True, sort=("c", decade, "Ascending"), units=1))
 
 
+def extra_filter(cont, table, col, values, page, key):
+    """One more visual-level filter on a container (v_heat and v_gen take only one)."""
+    cfg = filter_config(table, col, values, page, key + "-" + col)["filters"][0]
+    cont.setdefault("filterConfig", {"filters": []})["filters"].append(cfg)
+    return cont
+
+
+EU27 = "European Union (27 countries)"
+PRICE_GROUPS = ["1 Euro area members of 2025", "2 Other EU members", "3 Other countries"]
+SIX_PLACES = [EU27, "Germany", "France", "Poland", "Hungary", "Spain"]
+SPECIAL_GROUPS = ["All items", "Energy", "Food, alcohol and tobacco", "Services", "Core (no energy or food)"]
+PRICE_COUNTRIES = ["Albania", "Austria", "Belgium", "Bulgaria", "Croatia", "Cyprus", "Czechia", "Denmark", "Estonia", "Finland", "France", "Germany", "Greece", "Hungary", "Iceland", "Ireland", "Italy",
+                   "Kosovo", "Latvia", "Lithuania", "Luxembourg", "Malta", "Montenegro", "Netherlands", "North Macedonia", "Norway", "Poland", "Portugal", "Romania", "Serbia", "Slovakia", "Slovenia", "Spain",
+                   "Sweden", "Switzerland", "United Kingdom", "United States"]          # without Turkiye (72% in 2022) and the EU totals, which would stretch a scale
+
+
+def layout_prices(c):
+    """Consumer prices (one row a country, a category and a month; the annual rate of change, Eurostat HICP): dims = group of countries, category type, category, country, period; needs a date (so Year and
+    Month) and a column Rate; measures: 1 inflation rate (all rows selected), 2 overall inflation (the All items category), 3 highest overall rate, 4 countries, 5 overall inflation in 2025, 6 overall
+    inflation in 2022, 7 share of months above 2%, 8 EU inflation (any category), 9 food inflation in 2022, 10 energy inflation in 2022, 11 median overall inflation, 12 lowest overall rate, 13 overall
+    inflation capped for the colours, 14 EU inflation capped for the colours, 15 EU inflation in 2025, 16 EU inflation in 2022, 17 highest rate in 2022. Pages: Prices, Countries, Basket, Shock, Gaps."""
+    t, f, g, tip, gap = c.table, c.fmts, c.g, c.tip, c.gap
+    group, ctype, category, country, period = (c.d(i) for i in range(5))
+    rate, overall, highest, ncountries, o25, o22, above2, eu, food22, energy22, median, lowest, overall_col, eu_col, eu25, eu22, high22 = (c.m(i) for i in range(17))
+    mw = round(CW * 0.61)
+    sw = CW - mw - gap
+    pid, vis, nz = c.new_page("overview", c.title)
+    kpi_row(c, pid, vis, nz, [ncountries, eu25, high22, above2, eu22], h=100, spark=0, plain=[ncountries], prec=[eu25, eu22, high22])
+    vis.append(v_gen(pid, "six", "lineChart", t, {"Category": [("c", "Month")], "Series": [("c", country)], "Y": [("m", overall)]}, f, f"{overall} by month: the EU and five countries", *g(0, 176, mw, 262), nz(), tip=tip,
+                     legend=True, sort=("c", "Month", "Ascending"), vfilter=(country, SIX_PLACES)))
+    vis.append(v_gen(pid, "eu", "clusteredColumnChart", t, {"Category": [("c", "Year")], "Y": [("m", overall)]}, f, f"{overall} by year, European Union", *g(mw + gap, 176, sw, 262), nz(), tip=tip,
+                     sort=("c", "Year", "Ascending"), vfilter=(country, [EU27])))
+    vis.append(v_gen(pid, "groups", "lineChart", t, {"Category": [("c", "Month")], "Series": [("c", group)], "Y": [("m", median)]}, f, f"{median} by month and {lab(group)}", *g(0, 450, mw, 258), nz(), tip=tip,
+                     legend=True, sort=("c", "Month", "Ascending")))
+    vis.append(v_gen(pid, "period", "clusteredColumnChart", t, {"Category": [("c", period)], "Y": [("m", median)]}, f, f"{median} by {lab(period)}", *g(mw + gap, 450, sw, 258), nz(), tip=tip,
+                     sort=("c", period, "Ascending")))
+
+    pid, vis, nz = c.new_page("countries", "Country by year")
+    heat = v_heat(pid, t, country, "Year", overall, f, f"{overall}: every country, every year (red: prices rising fast, blue: falling)", *g(0, 64, mw, 644), nz(), color_measure=overall_col, size=8, totals=False)
+    heat["filterConfig"] = filter_config(t, group, PRICE_GROUPS, pid, "heat")
+    vis.append(heat)
+    vis.append(v_rank(pid, t, [country], [o25, o22, highest], o22, f, "Countries compared", *g(mw + gap, 64, sw, 644), nz(), o22, size=9, first_width=100, vfilter=(group, PRICE_GROUPS)))
+
+    pid, vis, nz = c.new_page("basket", "What the basket cost")
+    vis.append(v_gen(pid, "lines", "lineChart", t, {"Category": [("c", "Month")], "Series": [("c", category)], "Y": [("m", eu)]}, f, f"{eu} by month: all items, energy, food, services and the core", *g(0, 64, mw, 330), nz(),
+                     tip=tip, legend=True, sort=("c", "Month", "Ascending"), vfilter=(category, SPECIAL_GROUPS)))
+    vis.append(v_gen(pid, "bars", "clusteredBarChart", t, {"Category": [("c", category)], "Y": [("m", eu)]}, f, f"{eu} on average since 2000, by group of goods and services", *g(mw + gap, 64, sw, 330), nz(), tip=tip,
+                     sort=("m", eu, "Descending"), vfilter=(ctype, ["Main group"])))
+    heat = v_heat(pid, t, category, "Year", eu, f, f"{eu} by group and year", *g(0, 406, mw, 302), nz(), color_measure=eu_col, size=8, totals=False)
+    heat["filterConfig"] = filter_config(t, ctype, ["Main group"], pid, "heat")
+    extra_filter(heat, t, "Year", list(range(2001, 2026)), pid, "heat")
+    vis.append(heat)
+    vis.append(v_gen(pid, "period", "clusteredColumnChart", t, {"Category": [("c", period)], "Series": [("c", category)], "Y": [("m", eu)]}, f, f"{eu} by {lab(period)}", *g(mw + gap, 406, sw, 302), nz(), tip=tip,
+                     legend=True, sort=("c", period, "Ascending"), vfilter=(category, ["Energy", "Services", "Food, alcohol and tobacco"])))
+
+    pid, vis, nz = c.new_page("shock", "The 2022 shock")
+    vis.append(v_gen(pid, "bars", "clusteredColumnChart", t, {"Category": [("c", country)], "Y": [("m", o22)]}, f, f"{o22} by country", *g(0, 64, mw, 330), nz(), tip=tip, sort=("m", o22, "Descending"),
+                     vfilter=(group, PRICE_GROUPS)))
+    vis.append(v_gen(pid, "scatter", "scatterChart", t, {"Category": [("c", country)], "X": [("m", o22)], "Y": [("m", o25)], "Series": [("c", group)]}, f,
+                     f"{o25} against {lab(o22)} (Turkiye, 72% and 35%, is left off the chart)", *g(mw + gap, 64, sw, 330), nz(), tip=tip, legend=True, vfilter=(country, PRICE_COUNTRIES)))
+    vis.append(v_gen(pid, "peaks", "lineChart", t, {"Category": [("c", "Month")], "Series": [("c", country)], "Y": [("m", overall)]}, f, f"{overall}: the peak of 2022 in six countries", *g(0, 406, mw, 302), nz(), tip=tip,
+                     legend=True, sort=("c", "Month", "Ascending"), vfilter=(country, ["Estonia", "Lithuania", "Hungary", "Czechia", "Netherlands", "Spain"])))
+    vis.append(v_rank(pid, t, [country], [highest, o22, o25], highest, f, "The highest rates in the data (1997 hyperinflation included)", *g(mw + gap, 406, sw, 302), nz(), highest, size=9, first_width=100,
+                      vfilter=(group, PRICE_GROUPS)))
+
+    pid, vis, nz = c.new_page("gaps", "Food, energy and the rest")
+    vis.append(v_gen(pid, "scatter", "scatterChart", t, {"Category": [("c", country)], "X": [("m", food22)], "Y": [("m", energy22)], "Series": [("c", group)]}, f,
+                     f"{energy22} against {lab(food22)} (Turkiye, 85% and 127%, is left off the chart)", *g(0, 64, mw, 330), nz(), tip=tip, legend=True, vfilter=(country, PRICE_COUNTRIES)))
+    vis.append(v_gen(pid, "above", "clusteredBarChart", t, {"Category": [("c", country)], "Y": [("m", above2)]}, f, f"{above2} by country", *g(mw + gap, 64, sw, 330), nz(), tip=tip, sort=("m", above2, "Descending"),
+                     vfilter=(group, PRICE_GROUPS)))
+    vis.append(v_gen(pid, "now", "clusteredBarChart", t, {"Category": [("c", country)], "Y": [("m", o25)]}, f, f"{o25} by country", *g(0, 406, mw, 302), nz(), tip=tip, sort=("m", o25, "Descending"),
+                     vfilter=(group, PRICE_GROUPS)))
+    vis.append(v_gen(pid, "low", "clusteredBarChart", t, {"Category": [("c", country)], "Y": [("m", lowest)]}, f, f"{lowest} by country: falling prices", *g(mw + gap, 406, sw, 302), nz(), tip=tip,
+                     sort=("m", lowest, "Ascending"), vfilter=(group, PRICE_GROUPS)))
+
+
+NATIONS_AND_REGIONS = ["1 Nation", "2 English region"]
+
+
+def layout_estate(c):
+    """House prices (one row an area and a month; HM Land Registry UK HPI): dims = level (nation, English region, local authority), nation, decade, price band, area; needs a date (so Year and Month) and
+    columns Average_price, Price_index, Change_12m, Sales_count, Detached_price, Semi_price, Terraced_price, Flat_price, FTB_price, FOO_price, New_price, Old_price, Cash_sales, Mortgage_sales; measures:
+    1 average price, 2 price index, 3 sales, 4 change in 12 months, 5 UK price in August 2026, 6 UK price in 2000, 7 growth since 2000, 8 price in August 2026, 9 price in August 2016, 10 growth in ten
+    years, 11-14 detached, semi-detached, terraced and flat price, 15 first-time buyer price, 16 former owner-occupier price, 17 new-build price, 18 existing-home price, 19 new-build premium, 20 cash share
+    of sales, 21 areas, 22 UK change in 12 months in August 2026, 23 UK sales in 2025, 24 change in 12 months capped for the colours, 25 lowest 12-month change, 26 highest 12-month change, 27 detached price
+    in August 2026, 28 flat price in August 2026. Pages: Prices, Regions, Homes, Buyers, Local, Shocks."""
+    t, f, g, tip, gap = c.table, c.fmts, c.g, c.tip, c.gap
+    level, nation, decade, band, area = (c.d(i) for i in range(5))
+    (price, index, sales, chg, uk_now, uk_2000, growth0, now, then, growth10, detached, semi, terraced, flat, ftb, foo, new, old, premium, cash, areas, uk_chg, uk_sales, chg_col, low12, high12,
+     det_now, flat_now) = (c.m(i) for i in range(28))
+    mw = round(CW * 0.61)
+    sw = CW - mw - gap
+    UK = ["United Kingdom"]
+    full = {"valueAxis": {"labelDisplayUnits": num(1)}}                    # prices in full (300,000 and not 0.3 mln)
+    full_x = {"categoryAxis": {"labelDisplayUnits": num(1)}, "valueAxis": {"labelDisplayUnits": num(1)}}
+    pid, vis, nz = c.new_page("overview", c.title)
+    kpi_row(c, pid, vis, nz, [uk_now, growth0, uk_chg, uk_sales, areas], h=100, spark=0, plain=[uk_now, uk_sales, areas], prec=[uk_chg])
+    vis.append(v_gen(pid, "nations", "lineChart", t, {"Category": [("c", "Month")], "Series": [("c", area)], "Y": [("m", price)]}, f, f"{price} by month: the UK and its four nations", *g(0, 176, mw, 262), nz(), tip=tip,
+                     legend=True, sort=("c", "Month", "Ascending"), vfilter=(level, ["1 Nation"]), extra=full))
+    vis.append(v_gen(pid, "decade", "clusteredColumnChart", t, {"Category": [("c", decade)], "Y": [("m", price)]}, f, f"{price} by {lab(decade)}, United Kingdom", *g(mw + gap, 176, sw, 262), nz(), tip=tip,
+                     sort=("c", decade, "Ascending"), vfilter=(area, UK), units=1))
+    vis.append(v_gen(pid, "chg", "lineChart", t, {"Category": [("c", "Month")], "Y": [("m", chg)]}, f, f"{chg} by month, United Kingdom", *g(0, 450, mw, 258), nz(), tip=tip, sort=("c", "Month", "Ascending"),
+                     vfilter=(area, UK)))
+    vis.append(v_gen(pid, "sales", "clusteredColumnChart", t, {"Category": [("c", "Year")], "Y": [("m", sales)]}, f, f"{sales} by year, United Kingdom (2026 is part of a year)", *g(mw + gap, 450, sw, 258), nz(), tip=tip,
+                     sort=("c", "Year", "Ascending"), vfilter=(area, UK), units=1))
+
+    pid, vis, nz = c.new_page("regions", "Regions")
+    vis.append(v_gen(pid, "lines", "lineChart", t, {"Category": [("c", "Month")], "Series": [("c", area)], "Y": [("m", price)]}, f, f"{price} by month and English region", *g(0, 64, mw, 330), nz(), tip=tip, legend=True,
+                     sort=("c", "Month", "Ascending"), vfilter=(level, ["2 English region"]), extra=full))
+    vis.append(v_gen(pid, "now", "clusteredBarChart", t, {"Category": [("c", area)], "Y": [("m", now)]}, f, f"{now} by English region and nation", *g(mw + gap, 64, sw, 330), nz(), tip=tip, sort=("m", now, "Descending"),
+                     vfilter=(level, NATIONS_AND_REGIONS), units=1))
+    vis.append(v_gen(pid, "index", "lineChart", t, {"Category": [("c", "Month")], "Series": [("c", area)], "Y": [("m", index)]}, f, f"{index} (January 2023 = 100) for the four nations", *g(0, 406, mw, 302), nz(), tip=tip,
+                     legend=True, sort=("c", "Month", "Ascending"), vfilter=(area, ["England", "Scotland", "Wales", "Northern Ireland"])))
+    vis.append(v_rank(pid, t, [area], [now, then, growth10], growth10, f, "Regions and nations: ten years of price growth", *g(mw + gap, 406, sw, 302), nz(), growth10, size=10, first_width=130,
+                      vfilter=(level, NATIONS_AND_REGIONS)))
+
+    pid, vis, nz = c.new_page("homes", "Detached, terraced, flat")
+    vis.append(v_gen(pid, "types", "lineChart", t, {"Category": [("c", "Month")], "Y": [("m", detached), ("m", semi), ("m", terraced), ("m", flat)]}, f, "Average price by type of home, United Kingdom", *g(0, 64, mw, 330), nz(),
+                     tip=tip, legend=True, sort=("c", "Month", "Ascending"), vfilter=(area, UK), extra=full))
+    vis.append(v_gen(pid, "premium", "lineChart", t, {"Category": [("c", "Month")], "Y": [("m", premium)]}, f, f"{premium} (new homes against existing ones), United Kingdom", *g(mw + gap, 64, sw, 330), nz(), tip=tip,
+                     sort=("c", "Month", "Ascending"), vfilter=(area, UK)))
+    vis.append(v_gen(pid, "scatter", "scatterChart", t, {"Category": [("c", area)], "X": [("m", flat_now)], "Y": [("m", det_now)], "Series": [("c", nation)]}, f,
+                     f"{det_now} against {lab(flat_now)}, a dot for every local authority", *g(0, 406, mw, 302), nz(), tip=tip, legend=True, no_labels=True, vfilter=(level, ["3 Local authority"]), extra=full_x))
+    vis.append(v_rank(pid, t, [area], [flat_now, det_now], flat_now, f, "Where a flat costs the most", *g(mw + gap, 406, sw, 302), nz(), flat_now, size=10, first_width=140, vfilter=(level, ["3 Local authority"])))
+
+    pid, vis, nz = c.new_page("buyers", "Who is buying")
+    vis.append(v_gen(pid, "ftb", "lineChart", t, {"Category": [("c", "Month")], "Y": [("m", ftb), ("m", foo)]}, f, "First-time buyers and former owner-occupiers: average price, England", *g(0, 64, mw, 330), nz(),
+                     tip=tip, legend=True, sort=("c", "Month", "Ascending"), vfilter=(area, ["England"]), extra=full))
+    vis.append(v_gen(pid, "newold", "lineChart", t, {"Category": [("c", "Month")], "Y": [("m", new), ("m", old)]}, f, "New-build and existing homes: average price, United Kingdom", *g(mw + gap, 64, sw, 330), nz(), tip=tip,
+                     legend=True, sort=("c", "Month", "Ascending"), vfilter=(area, UK), extra=full))
+    vis.append(v_gen(pid, "cash", "lineChart", t, {"Category": [("c", "Year")], "Series": [("c", area)], "Y": [("m", cash)]}, f, f"{cash} by year: England, Scotland and Wales (no figures for Northern Ireland)", *g(0, 406, mw, 302), nz(), tip=tip, legend=True,
+                     sort=("c", "Year", "Ascending"), vfilter=(level, ["1 Nation"])))
+    vis.append(v_gen(pid, "pcol", "clusteredColumnChart", t, {"Category": [("c", "Year")], "Y": [("m", premium)]}, f, f"{premium} by year, United Kingdom", *g(mw + gap, 406, sw, 302), nz(), tip=tip,
+                     sort=("c", "Year", "Ascending"), vfilter=(area, UK)))
+
+    pid, vis, nz = c.new_page("local", "Local authorities")
+    vis.append(v_gen(pid, "scatter", "scatterChart", t, {"Category": [("c", area)], "X": [("m", then)], "Y": [("m", growth10)], "Series": [("c", nation)]}, f,
+                     f"{growth10} against {lab(then)}, a dot for every local authority", *g(0, 64, mw, 330), nz(), tip=tip, legend=True, no_labels=True, vfilter=(level, ["3 Local authority"]), extra=full_x))
+    tree = v_treemap(pid, t, fld_col(t, area), area, sales, f[sales], f"{sales} by local authority, all months", *g(mw + gap, 64, sw, 330), nz(), tip=tip, units=1)
+    tree["filterConfig"] = filter_config(t, level, ["3 Local authority"], pid, "tree")
+    vis.append(tree)
+    vis.append(v_rank(pid, t, [area, nation], [now, growth10], now, f, "The dearest local authorities", *g(0, 406, mw, 302), nz(), now, size=10, first_width=170, vfilter=(level, ["3 Local authority"])))
+    vis.append(v_rank(pid, t, [area, nation], [now, growth10], now, f, "The cheapest local authorities", *g(mw + gap, 406, sw, 302), nz(), now, size=10, first_width=130, direction="Ascending",
+                      vfilter=(level, ["3 Local authority"])))
+
+    pid, vis, nz = c.new_page("shocks", "Booms and busts")
+    heat = v_heat(pid, t, area, "Year", chg, f, f"{chg}: nations and regions by year (orange: prices rising, blue: falling)", *g(0, 64, CW, 330), nz(), color_measure=chg_col, size=10, totals=False)
+    heat["filterConfig"] = filter_config(t, level, NATIONS_AND_REGIONS, pid, "heat")
+    extra_filter(heat, t, "Year", list(range(1996, 2027)), pid, "heat")
+    vis.append(heat)
+    vis.append(v_gen(pid, "lines", "lineChart", t, {"Category": [("c", "Month")], "Series": [("c", area)], "Y": [("m", chg)]}, f, f"{chg} by month and nation", *g(0, 406, mw, 302), nz(), tip=tip, legend=True,
+                     sort=("c", "Month", "Ascending"), vfilter=(level, ["1 Nation"])))
+    vis.append(v_gen(pid, "low", "clusteredBarChart", t, {"Category": [("c", area)], "Y": [("m", low12)]}, f, f"{low12} by region and nation: the worst year", *g(mw + gap, 406, sw, 302), nz(), tip=tip,
+                     sort=("m", low12, "Ascending"), vfilter=(level, NATIONS_AND_REGIONS)))
+
+
+FUEL_COLOURS = {"Coal": "#8D949B", "Gas": "#FF7A00", "Oil": "#B5651D", "Nuclear": "#B388FF", "Hydro": "#4DA3FF", "Wind": "#2EC4B6", "Solar": "#FFD400", "Biomass": "#7BD389", "Other": "#C0C6CC"}
+
+
+def layout_plants(c):
+    """Power plants (one row a plant; WRI Global Power Plant Database): dims = region, fuel, fuel type, size band, era, subregion, country; columns Capacity_mw, Commissioning_year, Generation_gwh_2019 and a
+    3-degree Cell; measures: 1 plants, 2 capacity (GW), 3 countries, 4 average plant (MW), 5 largest plant (MW), 6 renewable share of capacity, 7 fossil share of capacity, 8 cell longitude, 9 cell latitude,
+    10 capacity factor in 2019 (plants with reported generation), 11 reported generation in 2019 (TWh), 12 nuclear share of capacity, 13 plants of 1,000 MW and over. Pages: Map, Fuels, Countries, Age, Giants."""
+    t, f, g, tip, gap = c.table, c.fmts, c.g, c.tip, c.gap
+    region, fuel, ftype, size, era, subregion, country = (c.d(i) for i in range(7))
+    plants, cap, ncountries, avg, largest, renew, fossil, lon, lat, cf, gen, nuclear, giants = (c.m(i) for i in range(13))
+    mw = round(CW * 0.61)
+    sw = CW - mw - gap
+    year_axis = {"categoryAxis": {"axisType": tx("Scalar"), "start": num(1950), "end": num(2020)}}
+    pid, vis, nz = c.new_page("overview", c.title)
+    kpi_row(c, pid, vis, nz, [plants, cap, ncountries, renew, giants], h=90, spark=0, plain=[plants, ncountries, giants, cap], prec=[renew])
+    vis.append(v_gen(pid, "map", "scatterChart", t, {"Category": [("c", "Cell")], "X": [("m", lon)], "Y": [("m", lat)], "Size": [("m", cap)], "Series": [("c", fuel)]}, f,
+                     f"Where the plants are: a dot for every 3-degree cell and fuel (size: {lab(cap)}; colour: {lab(fuel)})", *g(0, 166, CW, 542), nz(), tip=tip, legend=True, no_labels=True,
+                     ranges=((-180, 180), (-60, 85)), colors=(fuel, FUEL_COLOURS)))
+
+    pid, vis, nz = c.new_page("fuels", "Fuels")
+    vis.append(v_gen(pid, "cap", "clusteredBarChart", t, {"Category": [("c", fuel)], "Y": [("m", cap)]}, f, f"{cap} by {lab(fuel)}", *g(0, 64, mw, 330), nz(), tip=tip, sort=("m", cap, "Descending"), units=1,
+                     colors=(fuel, FUEL_COLOURS)))
+    vis.append(v_gen(pid, "type", "clusteredBarChart", t, {"Category": [("c", ftype)], "Y": [("m", cap)]}, f, f"{cap} by {lab(ftype)}", *g(mw + gap, 64, sw, 330), nz(), tip=tip, sort=("m", cap, "Descending"), units=1))
+    vis.append(v_gen(pid, "cf", "clusteredColumnChart", t, {"Category": [("c", fuel)], "Y": [("m", cf)]}, f, f"{cf} by {lab(fuel)} (plants with reported generation)", *g(0, 406, mw, 302), nz(), tip=tip,
+                     sort=("m", cf, "Descending"), colors=(fuel, FUEL_COLOURS)))
+    vis.append(v_gen(pid, "mix", "hundredPercentStackedBarChart", t, {"Category": [("c", region)], "Series": [("c", fuel)], "Y": [("m", cap)]}, f, f"Share of {lab(cap)} by {lab(region)} and {lab(fuel)}",
+                     *g(mw + gap, 406, sw, 302), nz(), tip=tip, legend=True, sort=("c", region, "Ascending"), colors=(fuel, FUEL_COLOURS)))
+
+    pid, vis, nz = c.new_page("countries", "Countries")
+    vis.append(v_treemap(pid, t, fld_col(t, country), country, cap, f[cap], f"{cap} by {lab(country)}", *g(0, 64, mw, 330), nz(), tip=tip, units=1))
+    vis.append(v_rank(pid, t, [country], [cap, plants, renew, fossil], cap, f, "Countries compared", *g(mw + gap, 64, sw, 330), nz(), cap, size=10, first_width=120))
+    vis.append(v_gen(pid, "scatter", "scatterChart", t, {"Category": [("c", country)], "X": [("m", fossil)], "Y": [("m", renew)], "Size": [("m", cap)], "Series": [("c", region)]}, f,
+                     f"{renew} against {lab(fossil)}, a bubble for every country", *g(0, 406, mw, 302), nz(), tip=tip, legend=True, no_labels=True, ranges=((0, 1), (0, 1))))
+    vis.append(v_gen(pid, "sub", "clusteredBarChart", t, {"Category": [("c", subregion)], "Y": [("m", cap)]}, f, f"{cap} by {lab(subregion)}", *g(mw + gap, 406, sw, 302), nz(), tip=tip, sort=("m", cap, "Descending"),
+                     units=1))
+
+    pid, vis, nz = c.new_page("age", "Built when")
+    vis.append(v_gen(pid, "years", "columnChart", t, {"Category": [("c", "Commissioning_year")], "Series": [("c", fuel)], "Y": [("m", cap)]}, f, f"{cap} by year of commissioning and {lab(fuel)} (plants with a stated year)",
+                     *g(0, 64, mw, 330), nz(), tip=tip, legend=True, sort=("c", "Commissioning_year", "Ascending"), units=1, colors=(fuel, FUEL_COLOURS), extra=year_axis))
+    vis.append(v_gen(pid, "era", "hundredPercentStackedColumnChart", t, {"Category": [("c", era)], "Series": [("c", fuel)], "Y": [("m", cap)]}, f, f"Share of {lab(cap)} by {lab(era)} and {lab(fuel)}", *g(mw + gap, 64, sw, 330),
+                     nz(), tip=tip, legend=True, sort=("c", era, "Ascending"), colors=(fuel, FUEL_COLOURS), vfilter=(era, [e for e in ERAS if not e.startswith("8")])))
+    vis.append(v_gen(pid, "size", "lineChart", t, {"Category": [("c", "Commissioning_year")], "Y": [("m", avg)]}, f, f"{avg} by year of commissioning", *g(0, 406, mw, 302), nz(), tip=tip,
+                     sort=("c", "Commissioning_year", "Ascending"), extra=year_axis))
+    vis.append(v_gen(pid, "eras", "clusteredColumnChart", t, {"Category": [("c", era)], "Y": [("m", plants)]}, f, f"{plants} by {lab(era)}", *g(mw + gap, 406, sw, 302), nz(), tip=tip, sort=("c", era, "Ascending"), units=1))
+
+    pid, vis, nz = c.new_page("giants", "The giants")
+    vis.append(v_rank(pid, t, ["Plant", country, fuel], [largest], largest, f, "The biggest plants of all", *g(0, 64, mw, 330), nz(), largest, size=10, first_width=170))
+    vis.append(v_gen(pid, "size", "clusteredColumnChart", t, {"Category": [("c", size)], "Y": [("m", plants)]}, f, f"{plants} by {lab(size)}", *g(mw + gap, 64, sw, 330), nz(), tip=tip, sort=("c", size, "Ascending"), units=1))
+    vis.append(v_gen(pid, "gfuel", "clusteredBarChart", t, {"Category": [("c", fuel)], "Y": [("m", giants)]}, f, f"{giants} by {lab(fuel)}", *g(0, 406, mw, 302), nz(), tip=tip, sort=("m", giants, "Descending"),
+                     colors=(fuel, FUEL_COLOURS)))
+    vis.append(v_gen(pid, "gcountry", "clusteredBarChart", t, {"Category": [("c", country)], "Y": [("m", giants)]}, f, f"{giants} by {lab(country)}", *g(mw + gap, 406, sw, 302), nz(), tip=tip,
+                     sort=("m", giants, "Descending")))
+
+
+ERAS = ["1 Before 1960", "2 1960 to 1979", "3 1980 to 1999", "4 2000 to 2009", "5 2010 to 2020", "8 Year not stated"]
+
+
 LAYOUT_PAGES = {
     "pulse": [("overview", "Overview"), ("rhythm", "Rhythm"), ("weather", "Weather"), ("seasons", "Seasons"), ("details", "Details"), ("about", "About")],
     "flow": [("overview", "Overview"), ("patients", "Patients"), ("stay", "Stay"), ("treatment", "Treatment"), ("details", "Details"), ("about", "About")],
@@ -2661,6 +2889,9 @@ LAYOUT_PAGES = {
     "planets": [("overview", "Atlas"), ("methods", "Methods"), ("worlds", "Worlds"), ("neighbours", "Neighbours"), ("details", "Details"), ("about", "About")],
     "wikitop": [("overview", "Traffic"), ("stars", "Stars"), ("evergreens", "Evergreens"), ("calendar", "Calendar"), ("types", "Types"), ("details", "Details"), ("about", "About")],
     "nations": [("overview", "Wealth"), ("rich", "Rich and poor"), ("connected", "Connected"), ("power", "Power"), ("climate", "Climate"), ("details", "Details"), ("about", "About")],
+    "prices": [("overview", "Prices"), ("countries", "Countries"), ("basket", "Basket"), ("shock", "Shock"), ("gaps", "Gaps"), ("details", "Details"), ("about", "About")],
+    "estate": [("overview", "Prices"), ("regions", "Regions"), ("homes", "Homes"), ("buyers", "Buyers"), ("local", "Local"), ("shocks", "Shocks"), ("details", "Details"), ("about", "About")],
+    "plants": [("overview", "Map"), ("fuels", "Fuels"), ("countries", "Countries"), ("age", "Age"), ("giants", "Giants"), ("details", "Details"), ("about", "About")],
     "bump": [("overview", "Bump chart"), ("flows", "Flows"), ("table", "Rank table"), ("staying", "Staying power"), ("size", "Size"), ("details", "Details"), ("about", "About")],
 }
 LAYOUTS = {"pulse": layout_pulse, "flow": layout_flow, "lab": layout_lab, "board": layout_board, "story": layout_story, "mix": layout_mix, "atlas": layout_atlas, "macro": layout_macro, "catalog": layout_catalog, "climate": layout_climate, "pyramid": layout_pyramid, "bump": layout_bump,
@@ -2668,7 +2899,7 @@ LAYOUTS = {"pulse": layout_pulse, "flow": layout_flow, "lab": layout_lab, "board
            "nutri": layout_nutri, "orbits": layout_orbits, "transit": layout_transit,
            "world": layout_world, "holiday": layout_holiday, "bricks": layout_bricks,
            "sats": layout_sats, "roads": layout_roads, "fx": layout_fx,
-           "congress": layout_congress, "storms": layout_storms, "league": layout_league, "planets": layout_planets, "wikitop": layout_wikitop, "nations": layout_nations}
+           "congress": layout_congress, "storms": layout_storms, "league": layout_league, "planets": layout_planets, "wikitop": layout_wikitop, "nations": layout_nations, "prices": layout_prices, "estate": layout_estate, "plants": layout_plants}
 
 
 def theme_json():
@@ -2704,7 +2935,7 @@ def build_report(table, title, date, dims, metrics, measures, cols, about=None, 
     labels = {"overview": "Overview", "breakdown": "Breakdown", "compare": "Compare", "trends": "Trends", "matrix": "Matrix", "details": "Details", "about": "About"}
     if layout != "classic":
         keys, labels = [k for k, _ in LAYOUT_PAGES[layout]], dict(LAYOUT_PAGES[layout])
-        if layout in ("pulse", "mix", "macro", "climate", "cycle", "quake", "desk", "grid", "transit", "world", "holiday", "sats", "roads", "fx", "congress", "storms", "league", "wikitop", "nations") and not date:
+        if layout in ("pulse", "mix", "macro", "climate", "cycle", "quake", "desk", "grid", "transit", "world", "holiday", "sats", "roads", "fx", "congress", "storms", "league", "wikitop", "nations", "prices", "estate") and not date:
             sys.exit(f"the {layout} layout needs a date column")
     pid_of = {k: oid("page", k) for k in keys}
     tip_pid = oid("page", "tooltip")
@@ -2845,6 +3076,49 @@ def build_report(table, title, date, dims, metrics, measures, cols, about=None, 
                 vis.append(v_textbox(pid, f"nav-cap-{k}", 2, 46 + i * 58, NAV_W - 4, 16, 11 + 2 * i, [(labels[k], {"fontSize": "7pt", "color": "#FFFFFF" if active else STYLE["nav_text"], "_align": "center"})]))
             vis.append(v_textbox(pid, "nav-title", CX, 6, CW, 24, 2, [(title, {"fontSize": "10pt", "color": MUTED})]))
             vis.append(v_textbox(pid, "title", CX, 26, CW, 42, nz() + 100, [(heading, {"fontSize": "20pt", "fontWeight": "bold", "color": INK})]))
+        elif STYLE["header"] == "receipt":      # a till roll: a paper strip with the title in capitals, the pages numbered like items and a dashed rule below
+            vis = [v_shape(pid, "nav-bg", 0, 0, 1280, 78, 1, NAVY),
+                   v_textbox(pid, "nav-title", 14, 4, 1252, 30, 2, [(title.upper(), {"fontSize": "14pt", "fontWeight": "bold", "color": INK, "fontFamily": STYLE["font"]})]),
+                   v_textbox(pid, "nav-dash", 14, 62, 1252, 16, 3, [("- " * 118, {"fontSize": "8pt", "color": MUTED, "fontFamily": STYLE["font"]})])]
+            bw = 120
+            for i, k in enumerate(keys):
+                active = k == key
+                vis += v_button(pid, f"nav-{k}", 14 + i * (bw + 6), 34, bw, 26, 10 + 2 * i, f"{i + 1:02d} {labels[k].upper()}", ("page", pid_of[k]), fill=TEAL if active else None,
+                                text_color="#FFFFFF" if active else STYLE["nav_text"], bold=active, size=10)
+        elif STYLE["header"] == "skyline":      # a sky-blue bar, two rows of buildings along its foot, the title and the pages above them
+            vis = [v_shape(pid, "nav-bg", 0, 0, 1280, 78, 1, NAVY)]
+            back = [30, 18, 26, 34, 14, 28, 22, 36, 16, 30, 24, 12, 32, 20, 28, 16, 34, 24, 18, 30]
+            front = [14, 22, 10, 18, 26, 12, 20, 16, 24, 10, 22, 14]
+            x0 = 6
+            for i in range(30):
+                bwid, bh = 38 + (i * 7) % 22, back[i % len(back)]
+                vis.append(v_shape(pid, f"bld-b{i}", x0, 78 - bh, bwid, bh, 2, "#B9D4E6"))
+                x0 += bwid + 2
+                if x0 > 1280:
+                    break
+            x0 = 20
+            for i in range(30):
+                bwid, bh = 30 + (i * 11) % 26, front[i % len(front)]
+                vis.append(v_shape(pid, f"bld-f{i}", x0, 78 - bh, bwid, bh, 3, TEAL))
+                x0 += bwid + 12
+                if x0 > 1280:
+                    break
+            vis.append(v_textbox(pid, "nav-title", 14, 6, 1280 - len(keys) * 104 - 30, 36, 4, [(title, {"fontSize": "16pt", "fontWeight": "bold", "color": TEAL})]))
+            bw = 100
+            for i, k in enumerate(keys):
+                active = k == key
+                vis += v_button(pid, f"nav-{k}", 1272 - (len(keys) - i) * (bw + 4) + 4, 12, bw, 28, 10 + 2 * i, labels[k], ("page", pid_of[k]), fill=ACCENT if active else CARD,
+                                text_color="#FFFFFF" if active else TEAL, bold=active, size=10)
+        elif STYLE["header"] == "hazard":       # a near-black bar with a caution-tape strip of yellow and black blocks under it
+            vis = [v_shape(pid, "nav-bg", 0, 0, 1280, 64, 1, NAVY)]
+            for i in range(64):
+                vis.append(v_shape(pid, f"tape-{i}", i * 20, 64, 20, 10, 2, TEAL if i % 2 == 0 else "#0E1114"))
+            vis.append(v_textbox(pid, "nav-title", 14, 12, 1280 - len(keys) * 104 - 30, 40, 4, [(title, {"fontSize": "17pt", "fontWeight": "bold", "color": "#FFFFFF"})]))
+            bw = 100
+            for i, k in enumerate(keys):
+                active = k == key
+                vis += v_button(pid, f"nav-{k}", 1272 - (len(keys) - i) * (bw + 4) + 4, 18, bw, 28, 10 + 2 * i, labels[k], ("page", pid_of[k]), fill=TEAL if active else CARD,
+                                text_color=NAVY if active else STYLE["nav_text"], bold=active, size=10)
         elif STYLE["header"] == "plaque":       # a serif title on the left, the pages in small capitals on the right, a double gold rule below
             vis = [v_textbox(pid, "nav-title", 12, 8, 560, 46, 2, [(title, {"fontSize": "20pt", "fontWeight": "bold", "color": TEAL, "fontFamily": STYLE["font"]})]),
                    v_shape(pid, "nav-r1", 16, 58, 1248, 2, 3, TEAL), v_shape(pid, "nav-r2", 16, 63, 1248, 1, 3, EDGE)]
@@ -3218,9 +3492,9 @@ def main():
     ap.add_argument("--geo", help='geographic columns for map visuals, "Column=Category,...": for example "State=StateOrProvince,Lat=Latitude,Lon=Longitude"')
     ap.add_argument("--rows-name", default="Rows", help="name of the row-count measure, for example Patients or Wines")
     ap.add_argument("--style", choices=sorted(STYLES), default="clean",
-                    help="look of the report: wiki (white, grey sidebar, blue links), sunrise (cream, orange header with dropdown filters), vintage (aged paper, ink icons, a lettered title, needs --assets), capitol (parchment, navy bar with stars), cyclone (deep sea blue, floating menu), pitch (mown stripes, yellow card), blueprint (drawing-board blue, orange menu), tarmac (a bar with a yellow centre line, road-sign tabs), bank (mint paper, green bars, gold, tabs at the bottom), atlas (UN blue, tabs on a rule), riviera (sand and teal with a filter panel), brick (yellow bar with studs), meadow (cream and forest green, pages in a pill), radar (green-black with a radar disc), loop (black bar with line-coloured bullets), helpdesk (navy web app with sidebar filters), orchid (dark indigo dashboard), lilac (light lavender dashboard), laurel (black and gold, serif title), solar (indigo with a sun and an orbit of pages), basalt (light with a slim numbered rail), frost (airy ice blue, centred title), pastel (pink and lavender, floating side card), newsprint (a front page in black and red), storm (slate with a numbered rail), terminal (amber on black), garage (cream with a bottom dock),  clean (light, left menu), midnight (dark blue, filters in the header), sunset (brown and orange, tabs on top), "
+                    help="look of the report: receipt (till roll, monospace, dashed rule), skyline (sky-blue header with buildings), voltage (near-black with a caution-tape strip), wiki (white, grey sidebar, blue links), sunrise (cream, orange header with dropdown filters), vintage (aged paper, ink icons, a lettered title, needs --assets), capitol (parchment, navy bar with stars), cyclone (deep sea blue, floating menu), pitch (mown stripes, yellow card), blueprint (drawing-board blue, orange menu), tarmac (a bar with a yellow centre line, road-sign tabs), bank (mint paper, green bars, gold, tabs at the bottom), atlas (UN blue, tabs on a rule), riviera (sand and teal with a filter panel), brick (yellow bar with studs), meadow (cream and forest green, pages in a pill), radar (green-black with a radar disc), loop (black bar with line-coloured bullets), helpdesk (navy web app with sidebar filters), orchid (dark indigo dashboard), lilac (light lavender dashboard), laurel (black and gold, serif title), solar (indigo with a sun and an orbit of pages), basalt (light with a slim numbered rail), frost (airy ice blue, centred title), pastel (pink and lavender, floating side card), newsprint (a front page in black and red), storm (slate with a numbered rail), terminal (amber on black), garage (cream with a bottom dock),  clean (light, left menu), midnight (dark blue, filters in the header), sunset (brown and orange, tabs on top), "
                          "violet (purple, left menu), neon (black with cyan, tabs at the bottom), paper (cream, serif headline), bordeaux (burgundy rail on the right)")
-    ap.add_argument("--layout", choices=["classic", "pulse", "flow", "lab", "board", "story", "mix", "atlas", "macro", "catalog", "climate", "pyramid", "bump", "people", "cycle", "quake", "desk", "market", "grid", "nutri", "orbits", "transit", "world", "holiday", "bricks", "sats", "roads", "fx", "congress", "storms", "league", "planets", "wikitop", "nations"], default="classic",
+    ap.add_argument("--layout", choices=["classic", "pulse", "flow", "lab", "board", "story", "mix", "atlas", "macro", "catalog", "climate", "pyramid", "bump", "people", "cycle", "quake", "desk", "market", "grid", "nutri", "orbits", "transit", "world", "holiday", "bricks", "sats", "roads", "fx", "congress", "storms", "league", "planets", "wikitop", "nations", "prices", "estate", "plants"], default="classic",
                     help="which pages and charts: classic (bars, donut, scatter, matrices), pulse (time series: combo, heat map, stacked area, gauge), "
                          "flow (categories: funnel, ribbon, waterfall, 100%% stacked), lab (numeric columns: gauge, small multiples, scatter by group), "
                          "board (a ranked table with data bars, actual against target), story (insight cards beside the charts), mix (stacked columns and bars, air-quality bands), "
@@ -3232,7 +3506,7 @@ def main():
                          "nutri (a food composition table: macros, rankings, minerals), orbits (near-Earth objects: orbit space, sizes, discoveries), transit (a rail system: recovery, stations, lines), "
                          "world (country demography with a play-axis bubble chart), holiday (tourism seasons and the COVID dip), bricks (a set catalogue: themes, sizes, giants), "
                          "sats (a satellite catalogue: orbits, constellations, countries), roads (road collisions: time, conditions, speed, places), fx (exchange rates: strength, volatility, lifespans), "
-                         "wikitop (the most viewed articles of an encyclopedia: traffic, stars, evergreens, calendar), nations (countries over time: wealth, a play-axis bubble chart, internet, electricity, carbon), planets (a catalogue of planets with the picture style vintage: found each year by method, kinds of world, neighbours), congress (a legislature: seats, ideology, ages, careers), storms (tropical cyclones: seasons, tracks, intensity, records), league (a football league: table, points, style, referees), "
+                         "wikitop (the most viewed articles of an encyclopedia: traffic, stars, evergreens, calendar), nations (countries over time: wealth, a play-axis bubble chart, internet, electricity, carbon), prices (inflation by country and category: a country-by-year heat map, the basket, the 2022 shock), estate (house prices by area and month: nations, regions, home types, buyers, local authorities, booms and busts), plants (power plants: a world map of cells, fuels, countries, age, giants), planets (a catalogue of planets with the picture style vintage: found each year by method, kinds of world, neighbours), congress (a legislature: seats, ideology, ages, careers), storms (tropical cyclones: seasons, tracks, intensity, records), league (a football league: table, points, style, referees), "
                          "atlas (a tile-grid map and a dot map with a ranking), macro (latest values and changes, rates, cycles), catalog (a vehicle catalogue: brands, engines, electric)")
     ap.add_argument("--insight", action="append", help='for the story layout: an insight card as "BIG NUMBER|sentence", repeatable (six are used)')
     ap.add_argument("--measure", action="append", help='custom DAX measure "Name=DAX|format" ({T} = table name); custom measures are used first in cards and charts')
